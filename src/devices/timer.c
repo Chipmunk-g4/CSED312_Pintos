@@ -178,7 +178,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   // 알람시간이 되면 스레드를 깨우도록 thread_wakeup 함수 호출
   if(Get_next_wakeup_tick() <= ticks)
-    thread_wakeup();
+    thread_wakeup(ticks);
   thread_tick ();
 }
 

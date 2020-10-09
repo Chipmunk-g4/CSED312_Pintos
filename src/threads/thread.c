@@ -99,7 +99,7 @@ thread_init (void)
   list_init (&all_list);
   list_init (&sleep_list);
 
-
+  next_wakeup_tick = INT64_MAX;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -632,14 +632,14 @@ thread_sleep (int64_t ticks){
  * - thread를 깨우는 순서는 다음과 같다.
  * 1. 인터럽트를 비활성화 시킨다.
  * 2. sleep_list를 배회한다.
- * 3. 어떤 스레드의 wake_up_tick이 next_wakeup_tick보다 작거나 같은 경우
+ * 3. 어떤 스레드의 wake_up_tick이 현재 tick보다 작거나 같은 경우
  * 3-1. 해당 스래드를 sleep_list에서 지운다.
  * 3-2. 해당 스래드의 상태를 unblock한다.
  * 4. 이외의 경우 next_wakeup_tick을 업데이트 한다. (다음으로 작은 시간 찾기)
  * 5. 인터럽트 다시 활성화
  */
 void
-thread_wakeup (void){
+thread_wakeup (int64_t ticks){
   // 1. 인터럽트 비활성화
   enum intr_level last_interrupt_status = intr_disable();
 
@@ -647,10 +647,9 @@ thread_wakeup (void){
   struct list_elem *now_elem; 
   for(now_elem = list_begin(&sleep_list); now_elem != list_end(&sleep_list);){
     struct thread *now_thread = list_entry(now_elem,struct thread, elem);
-    int64_t wakeup_time = Get_next_wakeup_tick();
 
-    // 3. 어떤 스레드의 wake_up_tick이 next_wakeup_tick보다 작거나 같은 경우
-    if(now_thread->Alarm_tick <= wakeup_time){
+    // 3. 어떤 스레드의 wake_up_tick이 현재 tick보다 작거나 같은 경우
+    if(now_thread->Alarm_tick <= ticks){
       //3-1. 해당 스래드를 sleep_list에서 지운다.
       now_elem = list_remove(now_elem);
       //3-2. 해당 스래드의 상태를 unblock한다.
