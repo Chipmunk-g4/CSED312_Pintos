@@ -26,6 +26,8 @@ static struct list ready_list;
 
 /* List of processes in Blocked state and sleeping */
 static struct list sleep_list;
+/* The shortest Alarm_tick which thread in sleep_list have */
+int64_t next_wakeup_tick;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -95,6 +97,9 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
+
+
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -585,3 +590,91 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/*
+ * - devices/timer.c/timer_sleep 함수에서 sleep_list 등의 변수에 접근이 번거롭기 때문에 thread_sleep이라는 함수를 따로 만들어 thread.c 내에서 구현한다.
+ * - thread를 재우는 역할을 하며, 그 순서는 다음과 같다.
+ * 1. 인터럽트를 비활성화 시킨다.
+ * 2. idle 스레드가 아닌지 확인한다.
+ * 3. 입력된 ticks값으로 next_wakeup_tick 업데이트
+ * 4. 현재 스레드의 wake_up_tick 업데이트
+ * 5. 현재 스레드 sleep_list에 넣기
+ * 6. 현재 스레드 block
+ * 7. 인터럽트 다시 활성화 
+ */
+void
+thread_sleep (int64_t ticks){
+  // 1. 인터럽트 비활성화
+  enum intr_level last_interrupt_status = intr_disable();
+  // 자기 자신 불러오기
+  struct thread *now_thread = thread_current();
+
+  // 2. idle 스레드가 아닌지 확인하기
+  if(now_thread != idle_thread){
+    // 3. 입력된 ticks값으로 next_wakeup_tick 업데이트
+    Update_next_wakeup_tick(ticks);
+    // 4. 현재 스레드의 wake_up_tick 업데이트
+    now_thread->Alarm_tick = ticks;
+
+    // 5. 현재 스레드 sleep_list에 넣기
+    list_push_back(&sleep_list, &now_thread->elem);
+    // 6. 현재 스레드 block
+    thread_block();
+  }
+
+  // 7. 인터럽트 다시 활성화
+  intr_enable(last_interrupt_status);
+
+}
+
+/*
+ * - 현재 sleep_list에 들어있는 스레드 중 next_wakeup_tick 이하의 시간에 일어나야하는 모든 스레드를 깨운다.
+ * - thread를 깨우는 순서는 다음과 같다.
+ * 1. 인터럽트를 비활성화 시킨다.
+ * 2. sleep_list를 배회한다.
+ * 3. 어떤 스레드의 wake_up_tick이 next_wakeup_tick보다 작거나 같은 경우
+ * 3-1. 해당 스래드를 sleep_list에서 지운다.
+ * 3-2. 해당 스래드의 상태를 unblock한다.
+ * 4. 이외의 경우 next_wakeup_tick을 업데이트 한다. (다음으로 작은 시간 찾기)
+ * 5. 인터럽트 다시 활성화
+ */
+void
+thread_wakeup (int64_t ticks){
+  // 1. 인터럽트 비활성화
+  enum intr_level last_interrupt_status = intr_disable();
+
+  // 2. sleep_list를 배회한다.
+  struct list_elem *now_elem; 
+  for(now_elem = list_begin(&sleep_list); now_elem != list_end(&sleep_list);){
+    struct thread *now_thread = list_entry(now_elem,struct thread, elem);
+
+    // 3. 어떤 스레드의 wake_up_tick이 next_wakeup_tick보다 작거나 같은 경우
+    if(now_thread->Alarm_tick <= Get_next_wakeup_tick()){
+      //3-1. 해당 스래드를 sleep_list에서 지운다.
+      now_elem = list_remove(now_elem);
+      //3-2. 해당 스래드의 상태를 unblock한다.
+      thread_unblock(now_thread);
+    }
+    // 4. 이외의 경우 next_wakeup_tick을 업데이트 한다. (다음으로 작은 시간 찾기)
+    else{
+      now_elem = list_next(now_elem);
+      Update_next_wakeup_tick(now_thread->Alarm_tick);
+    }
+  }
+
+  // 5. 인터럽트 다시 활성화
+  intr_enable(last_interrupt_status);
+}
+
+/* 현재 next_wakeup_tick을 반환한다. */
+int16_t
+Get_next_wakeup_tick (){
+  return next_wakeup_tick;
+}
+
+/* next_wakeup_tick을 입력된 tick과 비교하여 알맞은 것으로 업데이트 한다. */
+void
+Update_next_wakeup_tick (int64_t ticks){
+  if(ticks < next_wakeup_tick)
+    next_wakeup_tick = ticks;
+}
