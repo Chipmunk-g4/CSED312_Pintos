@@ -639,7 +639,7 @@ thread_sleep (int64_t ticks){
  * 5. 인터럽트 다시 활성화
  */
 void
-thread_wakeup (int64_t ticks){
+thread_wakeup (){
   // 1. 인터럽트 비활성화
   enum intr_level last_interrupt_status = intr_disable();
 
@@ -647,9 +647,10 @@ thread_wakeup (int64_t ticks){
   struct list_elem *now_elem; 
   for(now_elem = list_begin(&sleep_list); now_elem != list_end(&sleep_list);){
     struct thread *now_thread = list_entry(now_elem,struct thread, elem);
+    int64_t wakeup_time = Get_next_wakeup_tick();
 
     // 3. 어떤 스레드의 wake_up_tick이 next_wakeup_tick보다 작거나 같은 경우
-    if(now_thread->Alarm_tick <= Get_next_wakeup_tick()){
+    if(now_thread->Alarm_tick <= wakeup_time){
       //3-1. 해당 스래드를 sleep_list에서 지운다.
       now_elem = list_remove(now_elem);
       //3-2. 해당 스래드의 상태를 unblock한다.
@@ -667,7 +668,7 @@ thread_wakeup (int64_t ticks){
 }
 
 /* 현재 next_wakeup_tick을 반환한다. */
-int16_t
+int64_t
 Get_next_wakeup_tick (){
   return next_wakeup_tick;
 }
