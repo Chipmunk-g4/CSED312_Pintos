@@ -141,9 +141,9 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void thread_sleep (int64_t ticks);
-void thread_wakeup ();
+void thread_wakeup (void);
 
-int64_t Get_next_wakeup_tick();
+int64_t Get_next_wakeup_tick(void);
 void Update_next_wakeup_tick(int64_t ticks);
 
 #endif /* threads/thread.h */

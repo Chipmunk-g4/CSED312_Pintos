@@ -623,7 +623,7 @@ thread_sleep (int64_t ticks){
   }
 
   // 7. 인터럽트 다시 활성화
-  intr_enable(last_interrupt_status);
+  intr_set_level(last_interrupt_status);
 
 }
 
@@ -639,7 +639,7 @@ thread_sleep (int64_t ticks){
  * 5. 인터럽트 다시 활성화
  */
 void
-thread_wakeup (){
+thread_wakeup (void){
   // 1. 인터럽트 비활성화
   enum intr_level last_interrupt_status = intr_disable();
 
@@ -664,12 +664,12 @@ thread_wakeup (){
   }
 
   // 5. 인터럽트 다시 활성화
-  intr_enable(last_interrupt_status);
+  intr_set_level(last_interrupt_status);
 }
 
 /* 현재 next_wakeup_tick을 반환한다. */
 int64_t
-Get_next_wakeup_tick (){
+Get_next_wakeup_tick (void){
   return next_wakeup_tick;
 }
 
