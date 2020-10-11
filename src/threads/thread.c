@@ -212,6 +212,14 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+/*  thread_unblock 을 통해서 생성된 thread 가 ready_list 에 추가되고,
+    현재 thread 와 priority 의 비교를 해주어야 한다.
+ */
+    if(priority > running_thread()->priority) {
+//        새로 생긴 thread 의 priority 가 더 높으면, 현재 thread 가 yield 해준다.
+        thread_yield();
+    }
+
   return tid;
 }
 
@@ -351,6 +359,14 @@ void
 thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
+
+  if(!list_empty(&ready_list)) {
+      struct thread * max_priority_thread = list_entry (list_front (&ready_list), struct thread, elem);
+      if(new_priority < max_priority_thread->priority) {
+          thread_yield();
+      }
+  }
+
 }
 
 /* Returns the current thread's priority. */
