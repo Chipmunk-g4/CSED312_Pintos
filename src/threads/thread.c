@@ -1,4 +1,5 @@
 #include "threads/thread.h"
+#include "threads/fixed_point.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -19,6 +20,16 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
+
+/*
+ * MLFQS에서 nice, recent_cpu, load_avg의 default값은 0이다.
+ */
+#define DEFAULT_NICE 0
+#define DEFAULT_RECENT_CPU 0
+#define DEFAULT_LOAD_AVG 0
+
+#define NICE_MAX 20
+#define NICE_MIN -20
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -41,6 +52,9 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
+
+// load_avg값을 저장하는 변수이다.
+int load_avg;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame
@@ -102,6 +116,9 @@ thread_init (void)
   list_init (&sleep_list);
 
   next_wakeup_tick = INT64_MAX;
+
+  // load_avg값을 초기화한다.
+  load_avg = DEFAULT_LOAD_AVG;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -377,34 +394,95 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED)
-{
-  /* Not yet implemented. */
+thread_set_nice (int nice /* UNUSED */ ) 
+{ 
+  // nice값이 범위를 넘는지 확인
+  ASSERT (nice >= NICE_MIN && nice <= NICE_MAX);
+
+  thread_current()->nice = nice;
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void)
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current ()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void)
 {
-  /* Not yet implemented. */
-  return 0;
+  // load_avg값은 17.14 fixed-point 형태로 되어있기 때문에 값을 int로 변경 후 반환해야 한다.
+  return fp_to_int_ro(load_avg) * 100;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void)
 {
-  /* Not yet implemented. */
-  return 0;
+  // 스레드의 recent_cpu값은 17.14 fixed-point 형태로 되어있기 때문에 값을 int로 변경 후 반환해야 한다.
+  return fp_to_int_ro(thread_current()->recent_cpu) * 100;
 }
+
+/* 입력 스레드의 priority값 계산 후 저장 */
+void 
+MLFQS_calc_priority(struct thread *t){
+
+  // 입력된 스레드가 idle이면 그냥 넘긴다.
+  if(t == idle_thread)
+    return;
+
+  // priority = PRI_MAX –(recent_cpu/ 4) –(nice * 2)
+  int temp_priority = PRI_MAX - fp_to_int_ro(Div_fp_int( t->recent_cpu , 4 )) - t->nice * 2;
+
+  // temp_priority의 범위가 초과하지 않도록 해서 저장
+  if(temp_priority > PRI_MAX)
+    t->priority = PRI_MAX;
+  else if(temp_priority < PRI_MIN)
+    t->priority = PRI_MIN;
+  else
+    t->priority = temp_priority;
+}
+
+/* 입력 스레드의 recent_cpu값 계산 후 저장 */
+void 
+MLFQS_calc_recent_cpu(struct thread *t){
+
+  // 입력된 스레드가 idle이면 그냥 넘긴다.
+  if(t == idle_thread)
+    return;
+
+  // recent_cpu=(2 * load_avg) / (2 * load_avg+ 1) * recent_cpu+ nice
+  t->recent_cpu = Add_fp_int( Mul_fp_int(Div_fp_fp( Mul_fp_int( load_avg, 2), Add_fp_int(Mul_fp_int( load_avg, 2), 1)), t->recent_cpu), t->nice);
+}
+
+/* 현재 load_avg값 계산 후 저장 */
+void 
+MLFQS_calc_load_avg(void){
+
+  // running 중인 thread가 idle인지 아닌지에 따라 ready_threads의 개수가 달라진다.
+  int ready_threads;
+  ready_threads = (thread_current () != idle_thread) ? list_size (&ready_list) + 1 : list_size (&ready_list);
+
+  // load_avg= (59/60) * load_avg+ (1/60) * ready_threads
+  load_avg = Add_fp_fp(Mul_fp_fp(Div_fp_int(int_to_fp(59), 60), load_avg), Mul_fp_fp(Div_fp_int(int_to_fp(1), 60), ready_threads));
+}
+
+/* 모든 스레드의 priority값 업데이트 */
+void 
+MLFQS_recalc(void){
+  // 1. load_avg값 재계산
+  MLFQS_calc_load_avg();
+
+  // 2. 현재 존재하는 모든 thread의 priority 계산
+  struct list_elem * temp;
+  for (temp = list_begin(&all_list); temp != list_end(&all_list); temp = list_next(temp)){
+    MLFQS_calc_recent_cpu(temp);
+    MLFQS_calc_priority(temp);
+  }
+}
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
