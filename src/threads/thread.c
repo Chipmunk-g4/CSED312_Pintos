@@ -28,6 +28,9 @@
 #define DEFAULT_RECENT_CPU 0
 #define DEFAULT_LOAD_AVG 0
 
+#define NICE_MAX 20
+#define NICE_MIN -20
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -371,15 +374,17 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice /* UNUSED */ ) 
 { 
-  /* Not yet implemented. */
+  // nice값이 범위를 넘는지 확인
+  ASSERT (nice >= NICE_MIN && nice <= NICE_MAX);
+
+  thread_current()->nice = nice;
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current ()->nice;
 }
 
 /* Returns 100 times the system load average. */
