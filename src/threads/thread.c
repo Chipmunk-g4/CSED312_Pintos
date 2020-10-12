@@ -1,4 +1,5 @@
 #include "threads/thread.h"
+#include "threads/fixed_point.h"
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -19,6 +20,13 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
+
+/*
+ * MLFQS에서 nice, recent_cpu, load_avg의 default값은 0이다.
+ */
+#define DEFAULT_NICE 0
+#define DEFAULT_RECENT_CPU 0
+#define DEFAULT_LOAD_AVG 0
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -41,6 +49,9 @@ static struct thread *initial_thread;
 
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
+
+// load_avg값을 저장하는 변수이다.
+int load_avg;
 
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
@@ -100,6 +111,9 @@ thread_init (void)
   list_init (&sleep_list);
 
   next_wakeup_tick = INT64_MAX;
+
+  // load_avg값을 초기화한다.
+  load_avg = DEFAULT_LOAD_AVG;
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -383,6 +397,31 @@ thread_get_recent_cpu (void)
   /* Not yet implemented. */
   return 0;
 }
+
+/* 입력 스레드의 priority값 계산 후 저장 */
+void 
+MLFQS_calc_priority(struct thread *t){
+
+}
+
+/* 입력 스레드의 recent_cpu값 계산 후 저장 */
+void 
+MLFQS_calc_recent_cpu(struct thread *t){
+
+}
+
+/* 현재 load_avg값 계산 후 저장 */
+void 
+MLFQS_calc_load_avg(void){
+
+}
+
+/* 모든 스레드의 priority값 언데이트 */
+void 
+MLFQS_recalc(void){
+
+}
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
