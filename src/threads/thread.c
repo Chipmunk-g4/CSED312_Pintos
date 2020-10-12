@@ -68,7 +68,6 @@ static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
-static struct list_elem *find_max_priority_thread (void);
 static struct thread *next_thread_to_run (void);
 static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
@@ -77,7 +76,7 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-bool compare_thread_priority(struct list_elem* a, struct list_elem* b, void* aux);
+
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -495,6 +494,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+  t->original_priority = 0;
+  t->is_donated = false;
+  t->blocked_lock = NULL;
+  list_init(t->donation_list);
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -713,4 +717,8 @@ compare_thread_priority(struct list_elem* a, struct list_elem* b, void* aux) {
     struct thread * tb = list_entry(b, struct thread, elem);
 
     return ta->priority > tb->priority;
+}
+
+void sort_ready_list() {
+    list_sort(&ready_list, &compare_thread_priority, NULL);
 }
