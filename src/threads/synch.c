@@ -202,7 +202,7 @@ lock_acquire (struct lock *lock)
   if(lock->holder != NULL && current_thread->priority > lock->holder->priority) {
 //      current thread 가 lock 에 의해서 blocked 되었다고 기록
       current_thread->blocked_lock = lock;
-      lock->holder->is_donated = True;
+      lock->holder->is_donated = true;
       lock->holder->original_priority = lock->holder->priority;
       lock->holder->priority = current_thread->priority;
       sort_ready_list();
