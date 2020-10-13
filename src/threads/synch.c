@@ -202,10 +202,15 @@ lock_acquire (struct lock *lock)
   if(lock->holder != NULL && current_thread->priority > lock->holder->priority) {
 //      current thread 가 lock 에 의해서 blocked 되었다고 기록
       current_thread->blocked_lock = lock;
+//      set thread which holds holder is_donated true
       lock->holder->is_donated = true;
+//      record their original priority
       lock->holder->original_priority = lock->holder->priority;
+//      donate priority
       lock->holder->priority = current_thread->priority;
+//      since priority has changed, sort ready_list
       sort_ready_list();
+//      yield the thread
       thread_yield();
   }
 
@@ -244,17 +249,22 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+//  current thread
   struct thread * release_thread = lock->holder;
+//  free lock holder
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 
+//  if current thread was donated
   if(release_thread->is_donated) {
-      if (release_thread->priority > release_thread->original_priority) {
+//      TODO fix this place to original priority
+//      if (release_thread->priority > release_thread->original_priority) {
+//          set thread's priority to origin
           release_thread->priority = release_thread->original_priority;
           release_thread->is_donated = false;
           thread_yield();
       }
-  }
+//  }
 }
 
 /* Returns true if the current thread holds LOCK, false
