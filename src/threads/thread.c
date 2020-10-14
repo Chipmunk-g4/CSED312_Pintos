@@ -374,15 +374,23 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
-  thread_current ()->priority = new_priority;
+  //thread_current ()->priority = new_priority;
+  enum intr_level old_level = intr_disable (); // 인터럽트 해제
 
+  /*
+   * thread_set_priority 함수를 수행할 때 donation또한 고려하여 작동하도록 만들어야한다.
+   */
+
+  /*
   if(!list_empty(&ready_list)) {
       struct thread * max_priority_thread = list_entry (list_front (&ready_list), struct thread, elem);
       if(new_priority < max_priority_thread->priority) {
           thread_yield();
       }
   }
+  */
 
+  intr_set_level (old_level); // 인터럽트 활성화
 }
 
 /* Returns the current thread's priority. */
@@ -571,6 +579,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  t->original_priority = priority;
+  t->blocked_lock = NULL;
+  list_init(&t->donation_list);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

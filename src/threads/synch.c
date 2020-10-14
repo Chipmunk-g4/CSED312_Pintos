@@ -212,8 +212,39 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  /*
+   * lock_acquire할 때 다음 두가지 상황으로 나눌 수 있다.
+   * 1. lock의 holder가 존재하지 않는 경우. 즉, lock을 가져올 수 있는 경우
+   * 2. lock의 holder가 이미 존재하는 경우. 즉, lock을 가져올 수 없는 경우
+   * 
+   * 이때 1인 경우 바로 현재 스레드를 lock holder로 임명하고 세마포어를 낮추면 된다.
+   * 하지만 2인 경우 아래의 과정을 수행해야 한다.
+   * 
+   * 1. 현재 스레드가 lock을 기다리고 있음을 저장한다. (blocked_lock)
+   * 2. lock의 holder의 donation list 즉, 대기줄에 현재 스레드를 넣는다.
+   * 3. 현재 스레드를 now_thread라는 변수에 넣는다.
+   * 4. holder 스레드의 priority가 now_thread의 priority 값보다 작으면 holder 스레드의 priority를 now_thread의 priority 값으로 설정하여 priority donate를 한다.
+   * 5. 그리고 해당 holder의 blocked_lock의 holder를 now_thread에 넣는다. (이는 nested donation을 수행하기 위함이다.)
+   * 6. 4~5 과정을 now_thread가 null 즉, nested donation이 끝날 때 까지 반복한다.
+   * 
+   * 위 과정을 수행한 다음 스레드는 자신의 차례가 되면 lock을 가져오게 된다.
+   * (이 가져오는 과정은 lock_release에 의해 수행된다.)
+   * 
+   * 그리고 1~6 과정이 길고 복잡하기 때문에 새로운 함수를 선언하여 해당 함수 내에서 수행되도록 한다.
+   * (void donate_priority_with_nested(struct lock *l))
+   * 
+   * 이후 만약 holder가 있는 경우라면 sema_down을 통해 여기서 block되어 lock이 release될 때 까지 기다리게 된다.
+   */
+  enum intr_level old_level = intr_disable (); // 인터럽트 해제
+
+  if(lock->holder != NULL){
+    donate_priority_with_nested(lock); // priority donation하기
+  }
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+
+  intr_set_level (old_level); // 인터럽트 활성화
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -247,8 +278,83 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  /*
+   * lock_release는 크게 다음 2개의 순서대로 진행된다.
+   * 1. lock->holder를 삭제하고 세마포어를 증가시킨다. (이때 donation_list에서 lock을 기다리던 스레드 중 가장 높은 priority를 가진 스레드가 unblock된다.)
+   *    (순서가 살짝 이상하게 보일 수 있지만, 어차피 인터럽트는 꺼놨고, lock->holder=NULL이 됐기 때문에 2.에서 실행되는 내용은 unblock과 연관을 가지지 않는다.)
+   * 2. lock을 기다리던 스레드들을 unblock 및 donation_list에서 지운다. 즉, 해방시킨다.
+   * 3. 현재 스레드의 priority를 결정한다.
+   * 
+   * 여기서 현재 스레드와 lock->holder는 동일하여야 한다.
+   * 
+   * 이때 2, 3번의 수행에 대해서 더 자세하게 설명하면 다음과 같다.
+   * 2. 
+   *  + 1. 현재 스레드의 donation이 비어있지 않은지 확인. (만약 비어있는 경우에는 2번을 넘긴다.)
+   *  + 2. donation_list를 순회하면서 다음을 수행한다.
+   *    + 2-1. 현재 elem의 thread의 blocked_lock이 lock과 같은 경우 (같지 않으면 다음 elem으로 넘어간다.)
+   *    + 2-2. 해당 elem을 donation_list에서 제거한 다음, blocked_lock을 NULL로 만든다.
+   * 3.
+   *  + 1-1. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
+   *    + 1-1-1. donation_list에서 priority가 가장 큰 스레드의 priority값을 가져온다.
+   *    + 1-1-2. 만약 현재 스레드의 original_priority가 1-1-1에서 구한 값보다 크면
+   *             thread_set_priority(thread_current()->original_priority);를 수행한다.
+   *    + 1-1-3. 만약 같거나 작으면
+   *             현재 스레드의 priority를 priority가 가장 큰 스레드의 priority값으로 직접 설정한 후 thread_yield()를 수행한다. 
+   *             (가장 큰 값을 가지고 있어야 lock을 수행한 뒤 donation을 해제할 수 있다.)
+   *             (thread_yield를 수행하는 이유는 해당 lock과 관련 없으면서 priority가 더 큰 스레드를 먼저 끝낸 후 donation을 마치기 위함이다.)
+   *  + 1-2. 만약 donation_list가 비어있는 경우
+   *          thread_set_priority(thread_current()->original_priority);를 수행한다.
+   * 
+   */
+
+  enum intr_level old_level = intr_disable (); // 인터럽트 해제
+
+  // 1. lock->holder를 삭제하고 세마포어를 증가시킨다.
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+  // 2. lock을 기다리던 스레드들을 unblock 및 donation_list에서 지운다. 즉, 해방시킨다.
+  // + 1. 현재 스레드의 donation이 비어있지 않은지 확인. (만약 비어있는 경우에는 2번을 넘긴다.)
+  if(!list_empty(&thread_current()->donation_list)){
+    struct list_elem *temp;
+    // + 2. donation_list를 순회하면서 다음을 수행한다.
+    for (temp = list_begin (&thread_current()->donation_list); temp != list_end (&thread_current()->donation_list); temp = list_next (temp)){
+      // + 2-1. 현재 elem의 thread의 blocked_lock이 lock과 같은 경우 (같지 않으면 다음 elem으로 넘어간다.)
+      struct thread *temp_thd = list_entry (temp, struct thread, donation_elem);
+      if(temp_thd->blocked_lock == lock){
+        // + 2-2. 해당 elem을 donation_list에서 제거한 다음, blocked_lock을 NULL로 만든다.
+        list_remove(temp);
+        temp_thd->blocked_lock = NULL;
+      }
+    }
+  }
+
+  // 3. 현재 스레드의 priority를 결정한다.
+  // + 1-1. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
+  if(!list_empty(&thread_current()->donation_list)){
+    // + 1-1-1. donation_list에서 priority가 가장 큰 스레드의 priority값을 가져온다.
+    int largest_priority = list_entry(list_max(&thread_current()->donation_list, compare_thread_priority, NULL), struct thread, donation_elem)->priority;
+    // + 1-1-2. 만약 현재 스레드의 original_priority가 1-1-1에서 구한 값보다 크면
+    //            thread_set_priority(thread_current()->original_priority);를 수행한다.
+    if(thread_current()->original_priority > largest_priority){
+      thread_set_priority(thread_current()->original_priority);
+    }
+    // + 1-1-3. 만약 같거나 작으면
+    //           현재 스레드의 priority를 priority가 가장 큰 스레드의 priority값으로 직접 설정한 후 thread_yield()를 수행한다. 
+    //           (가장 큰 값을 가지고 있어야 lock을 수행한 뒤 donation을 해제할 수 있다.)
+    //           (thread_yield를 수행하는 이유는 해당 lock과 관련 없으면서 priority가 더 큰 스레드를 먼저 끝낸 후 donation을 마치기 위함이다.)
+    else {
+      thread_current()->priority = largest_priority;
+      thread_yield();
+    }
+  }
+  // + 1-2. 만약 donation_list가 비어있는 경우
+  //         thread_set_priority(thread_current()->original_priority);를 수행한다.
+  else{
+    thread_set_priority(thread_current()->original_priority);
+  }
+
+  intr_set_level (old_level); // 인터럽트 활성화
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -369,4 +475,35 @@ bool cmp_sem_front_priority(struct list_elem *a, struct list_elem *b, void *aux)
   // 각 세마포어의 waiters 리스트의 front에 있는 thread의 priority가 
   // sema가 더 크면 true, semb가 더 크면 false를 반환한다.
   return list_entry(list_front(&sema->semaphore.waiters), struct thread, elem)->priority > list_entry (list_front(&semb->semaphore.waiters), struct thread, elem)->priority;
+}
+
+/*
+   * 아래의 함수는 아래의 6가지의 과정을 수행하는 함수이다.
+   * 
+   * 1. 현재 스레드가 lock을 기다리고 있음을 저장한다. (blocked_lock)
+   * 2. lock의 holder의 donation list 즉, 대기줄에 현재 스레드를 넣는다.
+   * 3. 현재 스레드를 now_thread라는 변수에 넣는다.
+   * 4. holder 스레드의 priority가 now_thread의 priority 값보다 작으면 holder 스레드의 priority를 now_thread의 priority 값으로 설정하여 priority donate를 한다.
+   * 5. 그리고 해당 holder의 blocked_lock의 holder를 now_thread에 넣는다. (이는 nested donation을 수행하기 위함이다.)
+   * 6. 4~5 과정을 now_thread의 blocked_lock의 holer가 null 즉, nested donation이 끝날 때 까지 반복한다.
+   */
+void donate_priority_with_nested(struct lock *l){
+
+  // 1. 현재 스레드가 lock을 기다리고 있음을 저장한다. (blocked_lock)
+  thread_current()->blocked_lock = l;
+  // 2. lock의 holder의 donation list 즉, 대기줄에 현재 스레드를 넣는다.
+  list_push_front(&l->holder->donation_list, &thread_current()->donation_elem);
+
+  // 3. 현재 스레드를 now_thread라는 변수에 넣는다.
+  struct thread *now_thread = thread_current();
+
+  while(now_thread->blocked_lock->holder != NULL){
+    // 4. holder 스레드의 priority가 now_thread의 priority 값보다 작으면 holder 스레드의 priority를 now_thread의 priority 값으로 설정하여 priority donate를 한다.
+    if(now_thread->priority > now_thread->blocked_lock->holder->priority){
+      now_thread->blocked_lock->holder->priority = now_thread->priority;
+      // 5. 그리고 해당 holder의 blocked_lock의 holder를 now_thread에 넣는다. (이는 nested donation을 수행하기 위함이다.)
+      now_thread = now_thread->blocked_lock->holder;
+    }
+  }
+  // 6. 4~5 과정을 now_thread의 blocked_lock의 holer가 null 즉, nested donation이 끝날 때 까지 반복한다.
 }
