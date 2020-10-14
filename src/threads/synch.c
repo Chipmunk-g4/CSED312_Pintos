@@ -68,7 +68,14 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+      // list_push_back (&sema->waiters, &thread_current ()->elem);
+
+      /* 
+       * semaphore의 waiters 리스트에 스레드가 입력될 때 
+       * 스레드의 priority에 따라 정렬되어 입력 되도록 한다.
+       */
+      list_insert_ordered(&sema->waiters, &thread_current ()->elem, 
+                                        compare_thread_priority, NULL);
       thread_block ();
     }
   sema->value--;
@@ -114,10 +121,18 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) 
+    /*
+     * 스레드를 unblock하기 전 semaphore의 waiters리스트를 한번 정렬해준 다음에 
+     * 가장 앞에있는 스레드를 unblock한다.
+     */
+    //list_sort (&sema->waiters, compare_thread_priority, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
   sema->value++;
   intr_set_level (old_level);
+
+  // 이 후 yield를 하여 priority가 가장 높은 스레드가 실행될 수 있도록 한다.
+  thread_yield();
 }
 
 static void sema_test_helper (void *sema_);
@@ -295,7 +310,12 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+  // list_push_back (&cond->waiters, &waiter.elem);
+  /*
+   * conditional variable의 waiters리스트에 세마포어를 넣을 때 
+   * 넣는 세마포어의 front에 있는 thread의 priority의 순서에 따라 정렬을 하여 넣는다.
+   */
+  list_insert_ordered(&cond->waiters, &waiter.elem, cmp_sem_front_priority, NULL);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -317,6 +337,12 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
+    /*
+     * conditional variable의 waiters 리스트에서 세마포어를 가져오기 전
+     * 세마포어의 가장 앞에있는 스레드의 priority 순서대로 세마포어가 나올 수 있도록 
+     * waiters 리스트를 정렬한다.
+     */
+    list_sort (&cond->waiters, cmp_sem_front_priority, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
 }
@@ -335,4 +361,15 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
+}
+
+bool cmp_sem_front_priority(struct list_elem *a, struct list_elem *b, void *aux)
+{
+  // semaphore_elem 형식으로 a, b 변환
+  struct semaphore_elem *sema = list_entry (a, struct semaphore_elem, elem);
+  struct semaphore_elem *semb = list_entry (b, struct semaphore_elem, elem);
+ 
+  // 각 세마포어의 waiters 리스트의 front에 있는 thread의 priority가 
+  // sema가 더 크면 true, semb가 더 크면 false를 반환한다.
+  return list_entry(list_front(&sema->semaphore.waiters), struct thread, elem)->priority > list_entry (list_front(&semb->semaphore.waiters), struct thread, elem)->priority;
 }
