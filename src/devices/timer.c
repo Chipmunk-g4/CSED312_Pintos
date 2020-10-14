@@ -1,4 +1,5 @@
 #include "devices/timer.h"
+#include "threads/fixed_point.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -180,6 +181,22 @@ timer_interrupt (struct intr_frame *args UNUSED)
   if(Get_next_wakeup_tick() <= ticks)
     thread_wakeup(ticks);
   thread_tick ();
+
+  // mlfqs인 경우에만 실행된다.
+  if (thread_mlfqs)
+  {
+    // timer_interrupt가발생할때마다recuent_cpu1증가
+    thread_current ()->recent_cpu = Add_fp_int(thread_current ()->recent_cpu, 1);
+    // 1초마다load_avg, recent_cpu 계산
+    if (ticks % TIMER_FREQ == 0)
+      {
+        MLFQS_calc_load_avg();
+        MLFQS_calc_recent_cpu_all();
+      }
+    // 매 4tick마다 priority 계산
+    if (ticks % 4 == 0)
+      MLFQS_calc_priority_all();
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

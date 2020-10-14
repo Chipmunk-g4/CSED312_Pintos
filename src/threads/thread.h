@@ -153,6 +153,9 @@ void MLFQS_calc_priority(struct thread *t);
 void MLFQS_calc_recent_cpu(struct thread *t);
 void MLFQS_calc_load_avg(void);
 void MLFQS_recalc(void);
+void MLFQS_calc_priority_all(void);
+void MLFQS_calc_recent_cpu_all(void);
+
 
 
 void thread_sleep (int64_t ticks);

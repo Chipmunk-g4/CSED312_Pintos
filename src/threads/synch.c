@@ -237,11 +237,14 @@ lock_acquire (struct lock *lock)
    */
   enum intr_level old_level = intr_disable (); // 인터럽트 해제
 
-  if(lock->holder != NULL){
-    donate_priority_with_nested(lock); // priority donation하기
+  // mlfqs에서는 donate를 사용하지 않는다.
+  if(!thread_mlfqs){
+    if(lock->holder != NULL){
+      donate_priority_with_nested(lock); // priority donation하기
+    }
+    else
+      thread_current()->locker = NULL; // locker가 없으므로 null로 만든다.
   }
-  else
-    thread_current()->locker = NULL; // locker가 없으므로 null로 만든다.
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
@@ -308,35 +311,38 @@ lock_release (struct lock *lock)
   // 1. lock->holder를 삭제하고 세마포어를 증가시킨다.
   lock->holder = NULL;
 
-  // 2. lock을 기다리던 스레드들을 unblock 및 donation_list에서 지운다. 즉, 해방시킨다.
-  // + 1. 현재 스레드의 donation이 비어있지 않은지 확인. (만약 비어있는 경우에는 2번을 넘긴다.)
-  if(!list_empty(&thread_current()->donation_list)){
-    struct list_elem *temp;
-    // + 2. donation_list를 순회하면서 다음을 수행한다.
-    for (temp = list_begin (&thread_current()->donation_list); temp != list_end (&thread_current()->donation_list); temp = list_next (temp)){
-      // + 2-1. 현재 elem의 thread의 blocked_lock이 lock과 같은 경우 (같지 않으면 다음 elem으로 넘어간다.)
-      struct thread *temp_thd = list_entry (temp, struct thread, donation_elem);
-      if(temp_thd->blocked_lock == lock){
-        // + 2-2. 해당 elem을 donation_list에서 제거한 다음, blocked_lock을 NULL로 만든다.
-        list_remove(temp);
-        temp_thd->blocked_lock = NULL;
+  // mlfqs에서는 donate를 사용하지 않는다.
+  if(!thread_mlfqs){
+    // 2. lock을 기다리던 스레드들을 unblock 및 donation_list에서 지운다. 즉, 해방시킨다.
+    // + 1. 현재 스레드의 donation이 비어있지 않은지 확인. (만약 비어있는 경우에는 2번을 넘긴다.)
+    if(!list_empty(&thread_current()->donation_list)){
+      struct list_elem *temp;
+      // + 2. donation_list를 순회하면서 다음을 수행한다.
+      for (temp = list_begin (&thread_current()->donation_list); temp != list_end (&thread_current()->donation_list); temp = list_next (temp)){
+        // + 2-1. 현재 elem의 thread의 blocked_lock이 lock과 같은 경우 (같지 않으면 다음 elem으로 넘어간다.)
+        struct thread *temp_thd = list_entry (temp, struct thread, donation_elem);
+        if(temp_thd->blocked_lock == lock){
+          // + 2-2. 해당 elem을 donation_list에서 제거한 다음, blocked_lock을 NULL로 만든다.
+          list_remove(temp);
+          temp_thd->blocked_lock = NULL;
+        }
       }
     }
-  }
 
-  // 3. 현재 스레드의 priority를 결정한다.
-  struct thread *t = thread_current();
-  // + 1. 현재 스레드의 priority를 original_priority로 변경
-  t->priority = t->original_priority;
+    // 3. 현재 스레드의 priority를 결정한다.
+    struct thread *t = thread_current();
+    // + 1. 현재 스레드의 priority를 original_priority로 변경
+    t->priority = t->original_priority;
 
-  // + 2. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
-  if(!list_empty(&t->donation_list)){
-    // + 2-1. donation_list에서 priority가 가장 큰 스레드의 priority값을 가져온다.
-    int largest_priority = list_entry(list_max(&t->donation_list, (list_less_func *)compare_thread_priority, NULL), struct thread, donation_elem)->priority;
-    // + 2-2. 만약 현재 스레드의 original_priority가 2-1에서 구한 값보다 작으면 largest_priority값으로 변경한다.
-    //        (왜냐하면 donation_list에 남아있는 스레들을 위해 lock을 수행 후 반납해야 하기 때문이다.)
-    if(largest_priority > t->priority)
-      t->priority = largest_priority;
+    // + 2. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
+    if(!list_empty(&t->donation_list)){
+      // + 2-1. donation_list에서 priority가 가장 큰 스레드의 priority값을 가져온다.
+      int largest_priority = list_entry(list_max(&t->donation_list, (list_less_func *)compare_thread_priority, NULL), struct thread, donation_elem)->priority;
+      // + 2-2. 만약 현재 스레드의 original_priority가 2-1에서 구한 값보다 작으면 largest_priority값으로 변경한다.
+      //        (왜냐하면 donation_list에 남아있는 스레들을 위해 lock을 수행 후 반납해야 하기 때문이다.)
+      if(largest_priority > t->priority)
+        t->priority = largest_priority;
+    }
   }
 
   sema_up (&lock->semaphore);
