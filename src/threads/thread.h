@@ -162,6 +162,6 @@ int64_t Get_next_wakeup_tick(void);
 void Update_next_wakeup_tick(int64_t ticks);
 
 bool compare_thread_priority(struct list_elem* a, struct list_elem* b, void* aux);
-void sort_ready_list();
+void sort_ready_list(void);
 
 #endif /* threads/thread.h */
