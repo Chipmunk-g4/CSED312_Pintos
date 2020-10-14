@@ -379,16 +379,36 @@ thread_set_priority (int new_priority)
 
   /*
    * thread_set_priority 함수를 수행할 때 donation또한 고려하여 작동하도록 만들어야한다.
+   * 이 함수의 작동 순서는 다음과 같다.
+   * 
+   * 1. 현재 스레드의 donation_list가 비어있거나, 입력된 new_priority가 현재 스레드의 priority보다 큰경우
+   *    현재 스레드의 original_priority, priority 둘 다 new_priority로 변경한다.
+   *    (donation_list가 비어있는 경우 priority donation을 더이상 고려하지 않아도 되기 때문에 이렇게 한다. (주로 donation이 끝난 후 original_priority로 돌아올 때 사용된다.))
+   *    (그리고 입력된 new_priority가 현재 스레드의 priority보다 큰경우에는 주로 priority donation을 위한 경우이기 때문에 이렇게 사용된다.)
+   * 2. 이외의 경우
+   *    현재 스레드의 original_priority만 new_priority로 변경한다.
+   * 3. 마지막으로 ready_list의 앞을 확인해서 현재 스레드의 priority보다 ready_list 앞쪽 스레드의 priority가 큰 경우 yield를 하여 그게 수행되도록 한자.
+   *    (이건 이미 구현되어있다.)
    */
 
-  /*
+  // 1.
+  if(list_empty(&thread_current()->donation_list) || (new_priority > thread_current()->priority))
+  {
+    thread_current()->priority = new_priority; 
+    thread_current()->original_priority = new_priority;
+  }
+  // 2.
+  else
+    thread_current()->original_priority = new_priority;
+
+  // 3.
   if(!list_empty(&ready_list)) {
       struct thread * max_priority_thread = list_entry (list_front (&ready_list), struct thread, elem);
-      if(new_priority < max_priority_thread->priority) {
+      if(thread_current ()->priority < max_priority_thread->priority) {
           thread_yield();
       }
   }
-  */
+  
 
   intr_set_level (old_level); // 인터럽트 활성화
 }
