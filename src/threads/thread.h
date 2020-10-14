@@ -90,8 +90,19 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    int64_t Alarm_tick;                 /* Sleeping thread wakeup tick*/ 
+
+    int nice;         // 스레드의 nice값 저장
+    int recent_cpu;   // 스레드의 recent_cpu값 저장
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+
+    /* priority donation related variables. */
+    int original_priority;
+    bool is_donated;
+    struct lock * blocked_lock;
+    struct list donation_list;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -137,5 +148,20 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+void MLFQS_calc_priority(struct thread *t);
+void MLFQS_calc_recent_cpu(struct thread *t);
+void MLFQS_calc_load_avg(void);
+void MLFQS_recalc(void);
+
+
+void thread_sleep (int64_t ticks);
+void thread_wakeup (int64_t ticks);
+
+int64_t Get_next_wakeup_tick(void);
+void Update_next_wakeup_tick(int64_t ticks);
+
+bool compare_thread_priority(struct list_elem* a, struct list_elem* b, void* aux);
+void sort_ready_list();
 
 #endif /* threads/thread.h */

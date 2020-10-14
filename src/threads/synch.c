@@ -113,9 +113,11 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters)) {
+      list_sort (&sema->waiters, &compare_thread_priority, NULL);
+      thread_unblock(list_entry(list_pop_front(&sema->waiters),
+      struct thread, elem));
+  }
   sema->value++;
   intr_set_level (old_level);
 }
@@ -196,6 +198,22 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  struct thread * current_thread = thread_current();
+
+//  lock 을 다른 thread 에서 사용 중일 떄
+  if(lock->holder != NULL && lock->holder->priority < current_thread->priority) {
+//      current thread 가 lock 에 의해서 blocked 되었다고 기록
+      current_thread->blocked_lock = lock;
+      list_push_back(&lock->holder->donation_list, &current_thread->elem);
+
+      lock->holder->original_priority = lock->holder->priority;
+      lock->holder->is_donated = true;
+      lock->holder->priority = current_thread->priority;
+  }
+  else {
+      current_thread->blocked_lock = NULL;
+  }
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -231,8 +249,31 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+//  current thread
+  struct thread * release_thread = lock->holder;
+//  free lock holder
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+  if(!list_empty(&release_thread->donation_list)) {
+      release_thread->is_donated = false;
+      release_thread->priority = release_thread->original_priority;
+      struct list_elem * cur = list_front(&release_thread->donation_list);
+      while (1) {
+          struct thread * cur_thread = list_entry(cur, struct thread, elem);
+
+          if (cur_thread->blocked_lock == lock) {
+              cur_thread->blocked_lock = NULL;
+          }
+
+          if(cur != NULL && cur->prev != NULL && cur->next == NULL)
+              break;
+
+          cur = list_next(cur);
+      }
+
+      thread_yield();
+  }
 }
 
 /* Returns true if the current thread holds LOCK, false

@@ -90,10 +90,15 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-
   ASSERT (intr_get_level () == INTR_ON);
+
+  /*
   while (timer_elapsed (start) < ticks) 
     thread_yield ();
+  */
+
+  // 입력받은 ticks만큼 스레드를 재우도록 thread_sleep 함수 호출 
+  thread_sleep(start + ticks);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -171,6 +176,9 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  // 알람시간이 되면 스레드를 깨우도록 thread_wakeup 함수 호출
+  if(Get_next_wakeup_tick() <= ticks)
+    thread_wakeup(ticks);
   thread_tick ();
 }
 
