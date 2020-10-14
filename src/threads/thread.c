@@ -430,7 +430,15 @@ thread_set_nice (int nice /* UNUSED */ )
   // nice값이 범위를 넘는지 확인
   ASSERT (nice >= NICE_MIN && nice <= NICE_MAX);
 
+  enum intr_level old_level = intr_disable (); // 인터럽트 해제
+
   thread_current()->nice = nice;
+
+  // recent_cpu, priority 재계산 및 스케줄링
+  MLFQS_calc_recent_cpu(thread_current());
+  MLFQS_calc_priority(thread_current());
+
+  intr_set_level (old_level); // 인터럽트 활성화
 }
 
 /* Returns the current thread's nice value. */
@@ -460,6 +468,8 @@ thread_get_recent_cpu (void)
 void 
 MLFQS_calc_priority(struct thread *t){
 
+  ASSERT (is_thread (t));
+
   // 입력된 스레드가 idle이면 그냥 넘긴다.
   if(t == idle_thread)
     return;
@@ -479,6 +489,8 @@ MLFQS_calc_priority(struct thread *t){
 /* 입력 스레드의 recent_cpu값 계산 후 저장 */
 void 
 MLFQS_calc_recent_cpu(struct thread *t){
+
+  ASSERT (is_thread (t));
 
   // 입력된 스레드가 idle이면 그냥 넘긴다.
   if(t == idle_thread)
@@ -509,8 +521,8 @@ MLFQS_recalc(void){
   // 2. 현재 존재하는 모든 thread의 priority 계산
   struct list_elem * temp;
   for (temp = list_begin(&all_list); temp != list_end(&all_list); temp = list_next(temp)){
-    MLFQS_calc_recent_cpu(list_entry (temp, struct thread, elem));
-    MLFQS_calc_priority(list_entry (temp, struct thread, elem));
+    MLFQS_calc_recent_cpu(list_entry (temp, struct thread, allelem));
+    MLFQS_calc_priority(list_entry (temp, struct thread, allelem));
   }
 }
 
