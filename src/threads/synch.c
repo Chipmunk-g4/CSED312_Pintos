@@ -75,7 +75,7 @@ sema_down (struct semaphore *sema)
        * 스레드의 priority에 따라 정렬되어 입력 되도록 한다.
        */
       list_insert_ordered(&sema->waiters, &thread_current ()->elem, 
-                                        compare_thread_priority, NULL);
+                                        (list_less_func *)compare_thread_priority, NULL);
       thread_block ();
     }
   sema->value--;
@@ -125,7 +125,7 @@ sema_up (struct semaphore *sema)
      * 스레드를 unblock하기 전 semaphore의 waiters리스트를 한번 정렬해준 다음에 
      * 가장 앞에있는 스레드를 unblock한다.
      */
-    list_sort (&sema->waiters, compare_thread_priority, NULL);
+    list_sort (&sema->waiters, (list_less_func *)compare_thread_priority, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
   }
@@ -335,7 +335,7 @@ lock_release (struct lock *lock)
   // + 1-1. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
   if(!list_empty(&thread_current()->donation_list)){
     // + 1-1-1. donation_list에서 priority가 가장 큰 스레드의 priority값을 가져온다.
-    int largest_priority = list_entry(list_max(&thread_current()->donation_list, compare_thread_priority, NULL), struct thread, donation_elem)->priority;
+    int largest_priority = list_entry(list_max(&thread_current()->donation_list, (list_less_func *)compare_thread_priority, NULL), struct thread, donation_elem)->priority;
     // + 1-1-2. 만약 현재 스레드의 original_priority가 1-1-1에서 구한 값보다 크면
     //            thread_set_priority(thread_current()->original_priority);를 수행한다.
     if(thread_current()->original_priority > largest_priority){
@@ -446,7 +446,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
      * 세마포어의 가장 앞에있는 스레드의 priority 순서대로 세마포어가 나올 수 있도록 
      * waiters 리스트를 정렬한다.
      */
-    list_sort (&cond->waiters, cmp_sem_front_priority, NULL);
+    list_sort (&cond->waiters, (list_less_func *)cmp_sem_front_priority, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
   }

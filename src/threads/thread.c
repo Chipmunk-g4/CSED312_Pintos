@@ -273,7 +273,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
 //  ready list 에 priority 를 비교하여 insert 한다.
-  list_insert_ordered(&ready_list, &t->elem, compare_thread_priority, NULL);
+  list_insert_ordered(&ready_list, &t->elem, (list_less_func *)compare_thread_priority, NULL);
 //  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -346,7 +346,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread)
 //  ready list 에 priority 를 비교하여 insert 한다.
-      list_insert_ordered(&ready_list, &cur->elem, compare_thread_priority, NULL);
+      list_insert_ordered(&ready_list, &cur->elem, (list_less_func *)compare_thread_priority, NULL);
 //    list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
@@ -506,7 +506,7 @@ MLFQS_recalc(void){
   // 2. 현재 존재하는 모든 thread의 priority 계산
   struct list_elem * temp;
   for (temp = list_begin(&all_list); temp != list_end(&all_list); temp = list_next(temp)){
-    MLFQS_calc_recent_cpu(temp);
+    MLFQS_calc_recent_cpu(list_entry (temp, struct thread, elem));
     MLFQS_calc_priority(list_entry (temp, struct thread, elem));
   }
 }
@@ -826,5 +826,5 @@ compare_thread_priority(struct list_elem* a, struct list_elem* b, void* aux UNUS
 }
 
 void sort_ready_list() {
-    list_sort(&ready_list, &compare_thread_priority, NULL);
+    list_sort(&ready_list, (list_less_func *)compare_thread_priority, NULL);
 }
