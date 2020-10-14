@@ -240,6 +240,8 @@ lock_acquire (struct lock *lock)
   if(lock->holder != NULL){
     donate_priority_with_nested(lock); // priority donation하기
   }
+  else
+    thread_current()->locker = NULL; // locker가 없으므로 null로 만든다.
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
@@ -485,10 +487,12 @@ bool cmp_sem_front_priority(struct list_elem *a, struct list_elem *b, void *aux)
    * 3. 현재 스레드를 now_thread라는 변수에 넣는다.
    * 4. holder 스레드의 priority가 now_thread의 priority 값보다 작으면 holder 스레드의 priority를 now_thread의 priority 값으로 설정하여 priority donate를 한다.
    * 5. 그리고 해당 holder의 blocked_lock의 holder를 now_thread에 넣는다. (이는 nested donation을 수행하기 위함이다.)
-   * 6. 4~5 과정을 now_thread의 blocked_lock의 holer가 null 즉, nested donation이 끝날 때 까지 반복한다.
+   * 6. 4~5 과정을 now_thread의 blocked_lock의 holer(즉, locker)가 null 즉, nested donation이 끝날 때 까지 반복한다.
    */
 void donate_priority_with_nested(struct lock *l){
 
+  // 현재 스레드의 locker를 l의 holder로 설정
+  thread_current()->locker = l->holder;
   // 1. 현재 스레드가 lock을 기다리고 있음을 저장한다. (blocked_lock)
   thread_current()->blocked_lock = l;
   // 2. lock의 holder의 donation list 즉, 대기줄에 현재 스레드를 넣는다.
@@ -497,13 +501,13 @@ void donate_priority_with_nested(struct lock *l){
   // 3. 현재 스레드를 now_thread라는 변수에 넣는다.
   struct thread *now_thread = thread_current();
 
-  while(now_thread->blocked_lock->holder != NULL){
+  while(now_thread->locker!=NULL)){
     // 4. holder 스레드의 priority가 now_thread의 priority 값보다 작으면 holder 스레드의 priority를 now_thread의 priority 값으로 설정하여 priority donate를 한다.
-    if(now_thread->priority > now_thread->blocked_lock->holder->priority){
-      now_thread->blocked_lock->holder->priority = now_thread->priority;
+    if(now_thread->priority > now_thread->locker->priority){
+      now_thread->locker->priority = now_thread->priority;
       // 5. 그리고 해당 holder의 blocked_lock의 holder를 now_thread에 넣는다. (이는 nested donation을 수행하기 위함이다.)
-      now_thread = now_thread->blocked_lock->holder;
+      now_thread = now_thread->locker;
     }
   }
-  // 6. 4~5 과정을 now_thread의 blocked_lock의 holer가 null 즉, nested donation이 끝날 때 까지 반복한다.
+  // 6. 4~5 과정을 now_thread의 blocked_lock의 holer(즉, locker)가 null 즉, nested donation이 끝날 때 까지 반복한다.
 }

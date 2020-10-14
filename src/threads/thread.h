@@ -93,9 +93,10 @@ struct thread
     int64_t Alarm_tick;                 /* Sleeping thread wakeup tick*/ 
 
     int original_priority;              // 현재 스레드가 donation을 받기 이전의 priority를 저장할 공간이다.
-    struct lock *blocked_lock;           // 현재 스레드가 기다리고 있는 lock을 저장한다
+    struct lock *blocked_lock;          // 현재 스레드가 기다리고 있는 lock을 저장한다
     struct list donation_list;          // 현재 스레드를 기다리고 있는 donation한 스레드들을 저장한다.
     struct list_elem donation_elem;
+    struct thread *locker;              // 현재 스레드가 사용하고자 하는 lock을 사용하고 있는 스레드 
 
     int nice;         // 스레드의 nice값 저장
     int recent_cpu;   // 스레드의 recent_cpu값 저장
