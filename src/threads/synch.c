@@ -283,7 +283,6 @@ lock_release (struct lock *lock)
   /*
    * lock_release는 크게 다음 2개의 순서대로 진행된다.
    * 1. lock->holder를 삭제하고 세마포어를 증가시킨다. (이때 donation_list에서 lock을 기다리던 스레드 중 가장 높은 priority를 가진 스레드가 unblock된다.)
-   *    (순서가 살짝 이상하게 보일 수 있지만, 어차피 인터럽트는 꺼놨고, lock->holder=NULL이 됐기 때문에 2.에서 실행되는 내용은 unblock과 연관을 가지지 않는다.)
    * 2. lock을 기다리던 스레드들을 unblock 및 donation_list에서 지운다. 즉, 해방시킨다.
    * 3. 현재 스레드의 priority를 결정한다.
    * 
@@ -313,7 +312,6 @@ lock_release (struct lock *lock)
 
   // 1. lock->holder를 삭제하고 세마포어를 증가시킨다.
   lock->holder = NULL;
-  sema_up (&lock->semaphore);
 
   // 2. lock을 기다리던 스레드들을 unblock 및 donation_list에서 지운다. 즉, 해방시킨다.
   // + 1. 현재 스레드의 donation이 비어있지 않은지 확인. (만약 비어있는 경우에는 2번을 넘긴다.)
@@ -330,6 +328,8 @@ lock_release (struct lock *lock)
       }
     }
   }
+
+  sema_up (&lock->semaphore);
 
   // 3. 현재 스레드의 priority를 결정한다.
   // + 1-1. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
