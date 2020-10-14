@@ -376,7 +376,8 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
 
-//  TODO change original priority by referencing thread list
+//  TODO: change original_priority by checking priority donation
+
   if(!list_empty(&ready_list)) {
       struct thread * max_priority_thread = list_entry (list_front (&ready_list), struct thread, elem);
       if(new_priority < max_priority_thread->priority) {
@@ -573,6 +574,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+//  initialize priority donation related variable
   t->original_priority = 0;
   t->is_donated = false;
   t->blocked_lock = NULL;
