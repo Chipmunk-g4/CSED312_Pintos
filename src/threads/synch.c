@@ -501,7 +501,7 @@ void donate_priority_with_nested(struct lock *l){
   // 3. 현재 스레드를 now_thread라는 변수에 넣는다.
   struct thread *now_thread = thread_current();
 
-  while(now_thread->locker!=NULL)){
+  while(now_thread->locker!=NULL){
     // 4. holder 스레드의 priority가 now_thread의 priority 값보다 작으면 holder 스레드의 priority를 now_thread의 priority 값으로 설정하여 priority donate를 한다.
     if(now_thread->priority > now_thread->locker->priority){
       now_thread->locker->priority = now_thread->priority;
