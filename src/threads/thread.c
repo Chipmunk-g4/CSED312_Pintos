@@ -376,6 +376,7 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
 
+//  TODO change original priority by referencing thread list
   if(!list_empty(&ready_list)) {
       struct thread * max_priority_thread = list_entry (list_front (&ready_list), struct thread, elem);
       if(new_priority < max_priority_thread->priority) {
