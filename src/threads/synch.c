@@ -311,12 +311,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  // list_push_back (&cond->waiters, &waiter.elem);
-  /*
-   * conditional variable의 waiters리스트에 세마포어를 넣을 때 
-   * 넣는 세마포어의 front에 있는 thread의 priority의 순서에 따라 정렬을 하여 넣는다.
-   */
-  list_insert_ordered(&cond->waiters, &waiter.elem, cmp_sem_front_priority, NULL);
+  list_push_back (&cond->waiters, &waiter.elem);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
