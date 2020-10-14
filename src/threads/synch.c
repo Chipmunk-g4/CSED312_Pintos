@@ -120,14 +120,15 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
+  if (!list_empty (&sema->waiters)){
     /*
      * 스레드를 unblock하기 전 semaphore의 waiters리스트를 한번 정렬해준 다음에 
      * 가장 앞에있는 스레드를 unblock한다.
      */
-    //list_sort (&sema->waiters, compare_thread_priority, NULL);
+    list_sort (&sema->waiters, compare_thread_priority, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
+  }
   sema->value++;
   intr_set_level (old_level);
 
@@ -336,7 +337,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
+  if (!list_empty (&cond->waiters)){
     /*
      * conditional variable의 waiters 리스트에서 세마포어를 가져오기 전
      * 세마포어의 가장 앞에있는 스레드의 priority 순서대로 세마포어가 나올 수 있도록 
@@ -345,6 +346,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
     list_sort (&cond->waiters, cmp_sem_front_priority, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
