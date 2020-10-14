@@ -295,16 +295,11 @@ lock_release (struct lock *lock)
    *    + 2-1. 현재 elem의 thread의 blocked_lock이 lock과 같은 경우 (같지 않으면 다음 elem으로 넘어간다.)
    *    + 2-2. 해당 elem을 donation_list에서 제거한 다음, blocked_lock을 NULL로 만든다.
    * 3.
-   *  + 1-1. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
-   *    + 1-1-1. donation_list에서 priority가 가장 큰 스레드의 priority값을 가져온다.
-   *    + 1-1-2. 만약 현재 스레드의 original_priority가 1-1-1에서 구한 값보다 크면
-   *             thread_set_priority(thread_current()->original_priority);를 수행한다.
-   *    + 1-1-3. 만약 같거나 작으면
-   *             현재 스레드의 priority를 priority가 가장 큰 스레드의 priority값으로 직접 설정한 후 thread_yield()를 수행한다. 
-   *             (가장 큰 값을 가지고 있어야 lock을 수행한 뒤 donation을 해제할 수 있다.)
-   *             (thread_yield를 수행하는 이유는 해당 lock과 관련 없으면서 priority가 더 큰 스레드를 먼저 끝낸 후 donation을 마치기 위함이다.)
-   *  + 1-2. 만약 donation_list가 비어있는 경우
-   *          thread_set_priority(thread_current()->original_priority);를 수행한다.
+   *  + 1. 현재 스레드의 priority를 original_priority로 변경
+   *  + 2. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
+   *    + 2-1. donation_list에서 priority가 가장 큰 스레드의 priority값을 가져온다.
+   *    + 2-2. 만약 현재 스레드의 original_priority가 2-1에서 구한 값보다 작으면 largest_priority값으로 변경한다.
+   *        (왜냐하면 donation_list에 남아있는 스레들을 위해 lock을 수행 후 반납해야 하기 때문이다.)
    * 
    */
 
@@ -329,44 +324,22 @@ lock_release (struct lock *lock)
     }
   }
 
+  // 3. 현재 스레드의 priority를 결정한다.
   struct thread *t = thread_current();
+  // + 1. 현재 스레드의 priority를 original_priority로 변경
   t->priority = t->original_priority;
 
+  // + 2. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
   if(!list_empty(&t->donation_list)){
+    // + 2-1. donation_list에서 priority가 가장 큰 스레드의 priority값을 가져온다.
     int largest_priority = list_entry(list_max(&t->donation_list, (list_less_func *)compare_thread_priority, NULL), struct thread, donation_elem)->priority;
+    // + 2-2. 만약 현재 스레드의 original_priority가 2-1에서 구한 값보다 작으면 largest_priority값으로 변경한다.
+    //        (왜냐하면 donation_list에 남아있는 스레들을 위해 lock을 수행 후 반납해야 하기 때문이다.)
     if(largest_priority > t->priority)
       t->priority = largest_priority;
   }
 
   sema_up (&lock->semaphore);
-
-  /*
-  // 3. 현재 스레드의 priority를 결정한다.
-  // + 1-1. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
-  if(!list_empty(&thread_current()->donation_list)){
-    // + 1-1-1. donation_list에서 priority가 가장 큰 스레드의 priority값을 가져온다.
-    int largest_priority = list_entry(list_max(&thread_current()->donation_list, (list_less_func *)compare_thread_priority, NULL), struct thread, donation_elem)->priority;
-    // + 1-1-2. 만약 현재 스레드의 original_priority가 1-1-1에서 구한 값보다 크면
-    //            thread_set_priority(thread_current()->original_priority);를 수행한다.
-    if(thread_current()->original_priority > largest_priority){
-      thread_set_priority(thread_current()->original_priority);
-    }
-    // + 1-1-3. 만약 같거나 작으면
-    //           현재 스레드의 priority를 priority가 가장 큰 스레드의 priority값으로 직접 설정한 후 thread_yield()를 수행한다. 
-    //           (가장 큰 값을 가지고 있어야 lock을 수행한 뒤 donation을 해제할 수 있다.)
-    //           (thread_yield를 수행하는 이유는 해당 lock과 관련 없으면서 priority가 더 큰 스레드를 먼저 끝낸 후 donation을 마치기 위함이다.)
-    else {
-      thread_current()->priority = largest_priority;
-      thread_yield();
-    }
-  }
-  // + 1-2. 만약 donation_list가 비어있는 경우
-  //         thread_set_priority(thread_current()->original_priority);를 수행한다.
-  else{
-    thread_set_priority(thread_current()->original_priority);
-  }
-  */
-
   intr_set_level (old_level); // 인터럽트 활성화
 }
 
