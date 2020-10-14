@@ -196,19 +196,6 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  struct thread * current_thread = thread_current();
-
-//  lock 을 다른 thread 에서 사용 중이고, priority donation 이 필요한 상황일 떄
-  if(lock->holder != NULL && current_thread->priority > lock->holder->priority) {
-//      current thread 가 lock 에 의해서 blocked 되었다고 기록
-      current_thread->blocked_lock = lock;
-      lock->holder->is_donated = true;
-      lock->holder->original_priority = lock->holder->priority;
-      lock->holder->priority = current_thread->priority;
-      sort_ready_list();
-      thread_yield();
-  }
-
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -244,17 +231,8 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  struct thread * release_thread = lock->holder;
   lock->holder = NULL;
   sema_up (&lock->semaphore);
-
-  if(release_thread->is_donated) {
-      if (release_thread->priority > release_thread->original_priority) {
-          release_thread->priority = release_thread->original_priority;
-          release_thread->is_donated = false;
-          thread_yield();
-      }
-  }
 }
 
 /* Returns true if the current thread holds LOCK, false

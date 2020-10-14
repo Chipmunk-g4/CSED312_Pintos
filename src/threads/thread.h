@@ -98,12 +98,6 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-    /* priority donation related variables. */
-    int original_priority;
-    bool is_donated;
-    struct lock * blocked_lock;
-    struct list donation_list;
-
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
