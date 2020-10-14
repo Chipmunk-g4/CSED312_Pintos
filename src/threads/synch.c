@@ -212,6 +212,24 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  struct thread * current_thread = thread_current();
+
+//  lock 을 다른 thread 에서 사용 중이고, priority donation 이 필요한 상황일 떄
+  if(lock->holder != NULL && current_thread->priority > lock->holder->priority) {
+//      current thread 가 lock 에 의해서 blocked 되었다고 기록
+      current_thread->blocked_lock = lock;
+//      set thread which holds holder is_donated true
+      lock->holder->is_donated = true;
+//      record their original priority
+      lock->holder->original_priority = lock->holder->priority;
+//      donate priority
+      lock->holder->priority = current_thread->priority;
+//      since priority has changed, sort ready_list
+      sort_ready_list();
+//      yield the thread
+      thread_yield();
+  }
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -247,8 +265,22 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+//  current thread
+  struct thread * release_thread = lock->holder;
+//  free lock holder
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+//  if current thread was donated
+  if(release_thread->is_donated) {
+//      TODO fix this place to original priority
+//      if (release_thread->priority > release_thread->original_priority) {
+//          set thread's priority to origin
+          release_thread->priority = release_thread->original_priority;
+          release_thread->is_donated = false;
+          thread_yield();
+      }
+//  }
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -311,7 +343,12 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+  // list_push_back (&cond->waiters, &waiter.elem);
+  /*
+   * conditional variable의 waiters리스트에 세마포어를 넣을 때 
+   * 넣는 세마포어의 front에 있는 thread의 priority의 순서에 따라 정렬을 하여 넣는다.
+   */
+  list_insert_ordered(&cond->waiters, &waiter.elem, cmp_sem_front_priority, NULL);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
