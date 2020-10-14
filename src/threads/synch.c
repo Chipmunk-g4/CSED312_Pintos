@@ -329,8 +329,18 @@ lock_release (struct lock *lock)
     }
   }
 
+  struct thread *t = thread_current();
+  t->priority = t->original_priority;
+
+  if(!list_empty(&t->donation_list)){
+    int largest_priority = list_entry(list_max(&t->donation_list, (list_less_func *)compare_thread_priority, NULL), struct thread, donation_elem)->priority;
+    if(largest_priority > t->priority)
+      t->priority = largest_priority;
+  }
+
   sema_up (&lock->semaphore);
 
+  /*
   // 3. 현재 스레드의 priority를 결정한다.
   // + 1-1. 만약 2.를 수행한 이후에도 donation_list가 비어있지 않은 경우 (이러한 경우에는 lock이외의 다른 lock을 기다리는 multiple donation 상황이다.)
   if(!list_empty(&thread_current()->donation_list)){
@@ -355,6 +365,7 @@ lock_release (struct lock *lock)
   else{
     thread_set_priority(thread_current()->original_priority);
   }
+  */
 
   intr_set_level (old_level); // 인터럽트 활성화
 }
