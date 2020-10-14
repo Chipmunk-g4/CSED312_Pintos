@@ -453,7 +453,7 @@ int
 thread_get_load_avg (void)
 {
   // load_avg값은 17.14 fixed-point 형태로 되어있기 때문에 값을 int로 변경 후 반환해야 한다.
-  return fp_to_int_ro(load_avg) * 100;
+  return fp_to_int_ro(load_avg * 100);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -461,7 +461,7 @@ int
 thread_get_recent_cpu (void)
 {
   // 스레드의 recent_cpu값은 17.14 fixed-point 형태로 되어있기 때문에 값을 int로 변경 후 반환해야 한다.
-  return fp_to_int_ro(thread_current()->recent_cpu) * 100;
+  return fp_to_int_ro(100 * thread_current()->recent_cpu);
 }
 
 /* 입력 스레드의 priority값 계산 후 저장 */
@@ -497,19 +497,21 @@ MLFQS_calc_recent_cpu(struct thread *t){
     return;
 
   // recent_cpu=(2 * load_avg) / (2 * load_avg+ 1) * recent_cpu+ nice
-  t->recent_cpu = Add_fp_int( Mul_fp_int(Div_fp_fp( Mul_fp_int( load_avg, 2), Add_fp_int(Mul_fp_int( load_avg, 2), 1)), t->recent_cpu), t->nice);
+  t->recent_cpu = Add_fp_int( Mul_fp_int(Div_fp_fp( (load_avg * 2), Add_fp_int((load_avg * 2), 1)), t->recent_cpu), t->nice);
 }
 
 /* 현재 load_avg값 계산 후 저장 */
 void 
 MLFQS_calc_load_avg(void){
 
+  //printf("load_avg: %d\n", load_avg);
+
   // running 중인 thread가 idle인지 아닌지에 따라 ready_threads의 개수가 달라진다.
   int ready_threads;
   ready_threads = (thread_current () != idle_thread) ? list_size (&ready_list) + 1 : list_size (&ready_list);
 
   // load_avg= (59/60) * load_avg+ (1/60) * ready_threads
-  load_avg = Add_fp_fp(Mul_fp_fp(Div_fp_int(int_to_fp(59), 60), load_avg), Mul_fp_fp(Div_fp_int(int_to_fp(1), 60), ready_threads));
+  load_avg = Mul_fp_fp(int_to_fp(59)/ 60, load_avg)+ int_to_fp(1)/ 60 * ready_threads;
 }
 
 /* 모든 스레드의 priority값 업데이트 */
@@ -518,11 +520,26 @@ MLFQS_recalc(void){
   // 1. load_avg값 재계산
   MLFQS_calc_load_avg();
 
-  // 2. 현재 존재하는 모든 thread의 priority 계산
+  // 2. 현재 존재하는 모든 thread의 priority, recent_cpu 계산
   struct list_elem * temp;
   for (temp = list_begin(&all_list); temp != list_end(&all_list); temp = list_next(temp)){
     MLFQS_calc_recent_cpu(list_entry (temp, struct thread, allelem));
     MLFQS_calc_priority(list_entry (temp, struct thread, allelem));
+  }
+}
+
+void MLFQS_calc_priority_all(void){
+  // 현재 존재하는 모든 thread의 priority 계산
+  struct list_elem * temp;
+  for (temp = list_begin(&all_list); temp != list_end(&all_list); temp = list_next(temp)){
+    MLFQS_calc_priority(list_entry (temp, struct thread, allelem));
+  }
+}
+void MLFQS_calc_recent_cpu_all(void){
+  // 현재 존재하는 모든 thread의 recent_cpu 계산
+  struct list_elem * temp;
+  for (temp = list_begin(&all_list); temp != list_end(&all_list); temp = list_next(temp)){
+    MLFQS_calc_recent_cpu(list_entry (temp, struct thread, allelem));
   }
 }
 

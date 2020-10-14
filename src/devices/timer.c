@@ -1,4 +1,5 @@
 #include "devices/timer.h"
+#include "threads/fixed_point.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -185,15 +186,16 @@ timer_interrupt (struct intr_frame *args UNUSED)
   if (thread_mlfqs)
   {
     // timer_interrupt가발생할때마다recuent_cpu1증가
-    thread_current ()->recent_cpu = thread_current ()->recent_cpu + 1;
-    // 1초마다load_avg, recent_cpu, priority 계산
+    thread_current ()->recent_cpu = Add_fp_int(thread_current ()->recent_cpu, 1);
+    // 1초마다load_avg, recent_cpu 계산
     if (ticks % TIMER_FREQ == 0)
       {
-        MLFQS_recalc();
+        MLFQS_calc_load_avg();
+        MLFQS_calc_recent_cpu_all();
       }
     // 매 4tick마다 priority 계산
     if (ticks % 4 == 3)
-      MLFQS_recalc();
+      MLFQS_calc_priority_all();
   }
 }
 
