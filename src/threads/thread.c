@@ -374,7 +374,10 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority)
 {
-  //thread_current ()->priority = new_priority;
+  // mlfqs에서는 해당 함수를 사용하지 않는다.
+  if(thread_mlfqs)
+    return;
+
   enum intr_level old_level = intr_disable (); // 인터럽트 해제
 
   /*

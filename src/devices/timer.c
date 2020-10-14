@@ -180,6 +180,21 @@ timer_interrupt (struct intr_frame *args UNUSED)
   if(Get_next_wakeup_tick() <= ticks)
     thread_wakeup(ticks);
   thread_tick ();
+
+  // mlfqs인 경우에만 실행된다.
+  if (thread_mlfqs)
+  {
+    // timer_interrupt가발생할때마다recuent_cpu1증가
+    thread_current ()->recent_cpu = thread_current ()->recent_cpu + 1;
+    // 1초마다load_avg, recent_cpu, priority 계산
+    if (ticks % TIMER_FREQ == 0)
+      {
+        MLFQS_recalc();
+      }
+    // 매 4tick마다 priority 계산
+    if (ticks % 4 == 3)
+      MLFQS_recalc();
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
