@@ -194,7 +194,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
         MLFQS_calc_recent_cpu_all();
       }
     // 매 4tick마다 priority 계산
-    if (ticks % 4 == 3)
+    if (ticks % 4 == 0)
       MLFQS_calc_priority_all();
   }
 }

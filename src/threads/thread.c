@@ -475,7 +475,7 @@ MLFQS_calc_priority(struct thread *t){
     return;
 
   // priority = PRI_MAX –(recent_cpu/ 4) –(nice * 2)
-  int temp_priority = PRI_MAX - fp_to_int_ro(Div_fp_int( t->recent_cpu , 4 )) - t->nice * 2;
+  int temp_priority = (Sub_fp_int (Sub_fp_fp (int_to_fp (PRI_MAX), Div_fp_int (t->recent_cpu, 4)), 2 * t->nice)) >> (14);
 
   // temp_priority의 범위가 초과하지 않도록 해서 저장
   if(temp_priority > PRI_MAX)
@@ -497,7 +497,7 @@ MLFQS_calc_recent_cpu(struct thread *t){
     return;
 
   // recent_cpu=(2 * load_avg) / (2 * load_avg+ 1) * recent_cpu+ nice
-  t->recent_cpu = Add_fp_int( Mul_fp_int(Div_fp_fp( (load_avg * 2), Add_fp_int((load_avg * 2), 1)), t->recent_cpu), t->nice);
+  t->recent_cpu = Add_fp_int (Mul_fp_fp (Div_fp_fp (Mul_fp_int (load_avg, 2), Add_fp_int (Mul_fp_int (load_avg, 2), 1)), t->recent_cpu), t->nice);
 }
 
 /* 현재 load_avg값 계산 후 저장 */
@@ -511,7 +511,7 @@ MLFQS_calc_load_avg(void){
   ready_threads = (thread_current () != idle_thread) ? list_size (&ready_list) + 1 : list_size (&ready_list);
 
   // load_avg= (59/60) * load_avg+ (1/60) * ready_threads
-  load_avg = Mul_fp_fp(int_to_fp(59)/ 60, load_avg)+ int_to_fp(1)/ 60 * ready_threads;
+  load_avg = Add_fp_fp (Div_fp_int (Mul_fp_int (load_avg, 59), 60), Div_fp_int (int_to_fp (ready_threads), 60));
 }
 
 /* 모든 스레드의 priority값 업데이트 */
