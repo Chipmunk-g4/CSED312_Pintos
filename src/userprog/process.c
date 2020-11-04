@@ -228,6 +228,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+// 성공적으로 파일을 연 경우 file에 쓰기를 방지한다.
+  file_deny_write(file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -313,6 +315,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+//  load에서 file_close를 호출하고 난 이후에 file write allow를 해준다.
+  file_allow_write(file);
   return success;
 }
 
