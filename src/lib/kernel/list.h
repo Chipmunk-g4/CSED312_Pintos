@@ -171,6 +171,9 @@ void list_sort (struct list *,
                 list_less_func *, void *aux);
 void list_insert_ordered (struct list *, struct list_elem *,
                           list_less_func *, void *aux);
+/* for project 1*/
+
+bool thread_less_func(struct list_elem *a, struct list_elem *b, void *aux);
 void list_unique (struct list *, struct list *duplicates,
                   list_less_func *, void *aux);
 
