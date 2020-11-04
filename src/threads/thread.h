@@ -90,19 +90,19 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    int64_t Alarm_tick;                 /* Sleeping thread wakeup tick*/ 
-
-    int original_priority;              // 현재 스레드가 donation을 받기 이전의 priority를 저장할 공간이다.
-    struct lock *blocked_lock;          // 현재 스레드가 기다리고 있는 lock을 저장한다
-    struct list donation_list;          // 현재 스레드를 기다리고 있는 donation한 스레드들을 저장한다.
-    struct list_elem donation_elem;
-    struct thread *locker;              // 현재 스레드가 사용하고자 하는 lock을 사용하고 있는 스레드 
-
-    int nice;         // 스레드의 nice값 저장
-    int recent_cpu;   // 스레드의 recent_cpu값 저장
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    /* for project 1 */
+    int64_t alarm_time;
+    /*for priority donation*/
+    struct list_elem semaelem;
+    struct list_elem condelem;
+    int original_priority;
+    struct list donor_thread_list;
+    struct list_elem donorelem;
+    struct lock* waiting_lock;
+    int nice;
+    int recent_cpu;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -116,6 +116,7 @@ struct thread
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
+
 extern bool thread_mlfqs;
 
 void thread_init (void);
@@ -134,7 +135,7 @@ struct thread *thread_current (void);
 tid_t thread_tid (void);
 const char *thread_name (void);
 
-void thread_exit (void) NO_RETURN;
+void thread_exit (void) NO_RETURN; 
 void thread_yield (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
@@ -149,22 +150,11 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-void MLFQS_calc_priority(struct thread *t);
-void MLFQS_calc_recent_cpu(struct thread *t);
-void MLFQS_calc_load_avg(void);
-void MLFQS_recalc(void);
-void MLFQS_calc_priority_all(void);
-void MLFQS_calc_recent_cpu_all(void);
-
-
-
-void thread_sleep (int64_t ticks);
-void thread_wakeup (int64_t ticks);
-
-int64_t Get_next_wakeup_tick(void);
-void Update_next_wakeup_tick(int64_t ticks);
-
-bool compare_thread_priority(struct list_elem* a, struct list_elem* b, void* aux);
-void sort_ready_list(void);
-
+bool priority_greater_func(struct list_elem *a, struct list_elem *b, void *aux);
+bool sema_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUSED); 
+bool cond_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
+bool donor_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
+void donate_priority(struct thread* donor, struct thread* donee);
+void set_mlfqs_recent_cpu(struct thread *t);
+void set_mlfqs_priority(struct thread *t);
 #endif /* threads/thread.h */
