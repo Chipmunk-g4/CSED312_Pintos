@@ -78,6 +78,13 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+/* Special flags for check thread_start or not
+ * Run scheduler if flag is true
+ * true if thread_start calls
+ * else, did not reach thread_start yet
+ * */
+bool flag_thread_start;
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -110,6 +117,8 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
+  flag_thread_start = false;
+
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
@@ -132,6 +141,9 @@ thread_init (void)
 void
 thread_start (void)
 {
+//    set flag_thread_start so scheduler could start
+  flag_thread_start = true;
+
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
@@ -248,6 +260,8 @@ thread_create (const char *name, int priority,
 void
 thread_block (void)
 {
+//    if flag is false then return
+  if(!flag_thread_start) return;
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
 
@@ -338,6 +352,8 @@ thread_exit (void)
 void
 thread_yield (void)
 {
+//    if flag is false then return
+  if(!flag_thread_start) return;
   struct thread *cur = thread_current ();
   enum intr_level old_level;
 
