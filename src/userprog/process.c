@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void argument_stack(char *file_name, void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -60,7 +61,7 @@ start_process (void *file_name_)
 
   // argument가 없는 파일 이름을 cmd_name에 저장한다.
   char *saved_ptr;
-  char *cmd_name = strtok_r((char *) file_name, " ", &saved_ptr);
+  char *cmd_name = strtok_r(file_name, " ", &saved_ptr);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -325,7 +326,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 // 성공적으로 파일을 연 경우 file에 쓰기를 방지한다.
-  file_deny_write(file);
+//  file_deny_write(file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -412,7 +413,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* We arrive here whether the load is successful or not. */
   file_close (file);
 //  load에서 file_close를 호출하고 난 이후에 file write allow를 해준다.
-  file_allow_write(file);
+//  file_allow_write(file);
   return success;
 }
 
