@@ -13,8 +13,14 @@ void get_argument(int *esp, int *arg, int count);
 
 void syscall_halt (void);
 void syscall_exit (int exit_code);
+pid_t syscall_exec(const char *cmd_line);
+int syscall_wait (pid_t pid);
 bool syscall_create (const char *file , unsigned initial_size);
 bool syscall_remove (const char *file);
+int syscall_read(int fd, void *buffer, unsigned size);
+int syscall_write(int fd, const void *buffer, unsigned size);
+
+// 아직까지 모든 syscall은 임시적인 단계로 계속 수정이 필요하다.
 
 void
 syscall_init (void) 
@@ -36,8 +42,12 @@ syscall_handler (struct intr_frame *f)
       syscall_exit(arg[0]);
       break;
     case SYS_EXEC:
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      syscall_exec(arg[0]);
       break;
     case SYS_WAIT:
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      syscall_wait(arg[0]);
       break;
     case SYS_CREATE:
       get_argument(f->esp, arg, 2); // 인자: 2개
@@ -52,8 +62,12 @@ syscall_handler (struct intr_frame *f)
     case SYS_FILESIZE:
       break;
     case SYS_READ:
+      get_argument(f->esp, arg, 3); // 인자: 3개
+      f->eax = syscall_read(arg[0],arg[1],arg[2]);
       break;
     case SYS_WRITE:
+      get_argument(f->esp, arg, 3); // 인자: 3개
+      f->eax = syscall_read(arg[0],arg[1],arg[2]);
       break;
     case SYS_SEEK:
       break;
@@ -118,6 +132,16 @@ syscall_exit (int exit_code)
   thread_exit ();
 }
 
+// exec 시스템 콜
+pid_t syscall_exec(const char *cmd_line){
+  return process_execute(cmd_line);
+}
+
+// wait 시스템 콜
+int syscall_wait (pid_t pid){
+  return process_wait(pid);
+}
+
 // create 시스템 콜
 bool syscall_create (const char *file , unsigned initial_size){
   // 파일을 생성한다.
@@ -128,4 +152,26 @@ bool syscall_create (const char *file , unsigned initial_size){
 bool syscall_remove (const char *file){
   // 파일을 삭제한다.
   return filesys_remove (file);
+}
+
+// read 시스템 콜
+int syscall_read(int fd, void *buffer, unsigned size){
+  int i;
+  if (fd == 0) {
+    for (i = 0; i < size; i ++) {
+      if (((char *)buffer)[i] == '\0') {
+        break;
+      }
+    }
+  }
+
+  return i;
+}
+
+int syscall_write(int fd, const void *buffer, unsigned size){
+  if (fd == 1) {
+    putbuf(buffer, size);
+    return size;
+  }
+  return -1;
 }
