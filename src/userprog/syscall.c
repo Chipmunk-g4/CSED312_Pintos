@@ -13,8 +13,8 @@ void get_argument(int *esp, int *arg, int count);
 
 void syscall_halt (void);
 void syscall_exit (int exit_code);
-pid_t syscall_exec(const char *cmd_line);
-int syscall_wait (pid_t pid);
+tid_t syscall_exec(const char *cmd_line);
+int syscall_wait (tid_t pid);
 bool syscall_create (const char *file , unsigned initial_size);
 bool syscall_remove (const char *file);
 int syscall_read(int fd, void *buffer, unsigned size);
@@ -32,7 +32,10 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   int arg[4]; // argument를 저장하는 공간이다.
-    
+  
+  //printf("number: %d\n", *(int *)(f->esp));
+  //hex_dump(f->esp, f->esp, 100, 1);
+
   switch (*(int *)(f->esp)) { // f->esp에는 syscall number가 담겨있다.
     case SYS_HALT:
       syscall_halt();
@@ -67,7 +70,7 @@ syscall_handler (struct intr_frame *f)
       break;
     case SYS_WRITE:
       get_argument(f->esp, arg, 3); // 인자: 3개
-      f->eax = syscall_read(arg[0],arg[1],arg[2]);
+      f->eax = syscall_write(arg[0],arg[1],arg[2]);
       break;
     case SYS_SEEK:
       break;
@@ -97,21 +100,18 @@ void check_valid_address(void *address){
 // 유저스택에 있는 데이터를 esp에서 4byte크기로 count개수 만큼 가져온다.
 void get_argument(int *esp, int *arg, int count){
 
-  int i;
-  // stack_pointer에 esp값을 저장한다. (+4를 하는 이유는 esp에는 syscall number가 있기 때문이다.)
-	void *stack_pointer=esp+4;
+  // every count
+  while (count--)
+  {
+    esp++;
 
-	if(count > 0)
-	{
-		for(i=0; i<count; i++){
-      // 주소가 유효한지 검사한다.
-			check_valid_address(stack_pointer);
-      // 값을 넣는다.
-			arg[i] = *(int *)stack_pointer;
-      // 다음 위치
-			stack_pointer = stack_pointer + 4;
-		}
-	}
+    // check whether bound of esp is legal
+    check_valid_address (esp);
+    check_valid_address (esp+3);
+
+    // get value
+    *(arg++) = *esp;
+  }
 }
 
 // 3. Syscall 함수들            -------------------------
@@ -133,12 +133,12 @@ syscall_exit (int exit_code)
 }
 
 // exec 시스템 콜
-pid_t syscall_exec(const char *cmd_line){
+tid_t syscall_exec(const char *cmd_line){
   return process_execute(cmd_line);
 }
 
 // wait 시스템 콜
-int syscall_wait (pid_t pid){
+int syscall_wait (tid_t pid){
   return process_wait(pid);
 }
 
