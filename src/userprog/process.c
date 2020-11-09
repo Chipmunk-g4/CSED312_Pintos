@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void argument_stack(char *file_name, void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -38,8 +39,12 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  // argument가 없는 파일 이름을 cmd_name에 저장한다.
+  char *saved_ptr;
+  char *cmd_name = strtok_r((char *) file_name, " ", &saved_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (cmd_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -54,12 +59,21 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  // argument가 없는 파일 이름을 cmd_name에 저장한다.
+  char *saved_ptr;
+  char *cmd_name = strtok_r(file_name, " ", &saved_ptr);
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (cmd_name, &if_.eip, &if_.esp);
+
+  if(success){
+    // 인자들을 parsing하고, 유저 스택을 채운다.
+    argument_stack(file_name, &if_.esp);
+  }
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -76,6 +90,86 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
+// file_name과 esp를 이용하여 argument들을 parsing하고, 유저 스택에 집어 넣는다.
+static void argument_stack(char *file_name, void **esp){
+  // argv, argc, 전체 길이 저장
+  char ** argv;
+  int argc;
+  int total_len;
+
+  // 토큰화를 위한 변수들
+  char stored_file_name[256];
+  char *token;
+  char *saved_ptr;
+  int i;
+  int len;
+  
+  // 파일 이름을 제외한 토큰들을 준비한다.
+  strlcpy(stored_file_name, file_name, strlen(file_name) + 1);
+  token = strtok_r(stored_file_name, " ", &saved_ptr);
+  argc = 0;
+
+  // token의 개수를 세서 argc의 값을 구한다.
+  while (token) {
+    argc += 1;
+    token = strtok_r(NULL, " ", &saved_ptr);
+  }
+
+  // argc의 개수 만큼 저장한 argv의 공간을 마련하고, argv를 구한다.
+  argv = (char **)malloc(sizeof(char *) * argc);
+  strlcpy(stored_file_name, file_name, strlen(file_name) + 1);
+  token = strtok_r(stored_file_name, " ", &saved_ptr);
+
+  for (i = 0; i < argc; i++) {
+    //len = strlen(token);
+    // 현재 토큰을 argv에 넣는다.
+    argv[i] = token;
+
+    // 다음 토큰
+    token = strtok_r(NULL, " ", &saved_ptr);
+  }
+
+  // argv를 스택에 push한다. (이때 가장 마지막에 있던 인자부터 push한다.)
+  total_len = 0;
+  for (i = argc - 1; 0 <= i; i --) {
+    // 저장할 위치로 이동
+    len = strlen(argv[i]) + 1; // '\0'도 포함되어야 한다.
+    *esp -= len;
+    // argv[i]를 현재 위치에 저장
+    strlcpy(*esp, argv[i], len);
+    argv[i] = *esp; // 현재 esp의 위치 값을 argv[i]에 저장한다.
+    // 전체 길이에 추가
+    total_len += len;
+  }
+  
+  // word align을 push한다. (4의 배수로 맞추기 위해 추가한다.)
+  *esp -= (total_len % 4 != 0) ? 4 - (total_len % 4) : 0;
+
+  // Null값을 추가한다.
+  *esp -= 4;
+  **(uint32_t **)esp = 0;
+
+  // argv값들이 저장된 주소를 저장한다.
+  for (i = argc - 1; 0 <= i; i--) {
+    *esp -= 4;
+    **(uint32_t **)esp = argv[i];
+  }
+
+  // argv값들이 저장된 주소들의 주소를 저장한다.
+  *esp -= 4;
+  **(uint32_t **)esp = *esp + 4;
+
+  // argc의 값을 저장한다.
+  *esp -= 4;
+  **(uint32_t **)esp = argc;
+  
+  //  fake address (0)를 저장한다.
+  *esp -= 4;
+  **(uint32_t **)esp = 0;
+
+  free(argv);
+}
+
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -88,6 +182,9 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  // 반복문으로 부모 프로세스가 바로 끝나지 않게 조금 지연시키자.
+  int i;
+  for (i = 0; i < 1000000000; i++);
   return -1;
 }
 
@@ -229,7 +326,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 // 성공적으로 파일을 연 경우 file에 쓰기를 방지한다.
-  file_deny_write(file);
+//  file_deny_write(file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -316,7 +413,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* We arrive here whether the load is successful or not. */
   file_close (file);
 //  load에서 file_close를 호출하고 난 이후에 file write allow를 해준다.
-  file_allow_write(file);
+//  file_allow_write(file);
   return success;
 }
 
