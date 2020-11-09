@@ -61,7 +61,8 @@ start_process (void *file_name_)
 
   // argument가 없는 파일 이름을 cmd_name에 저장한다.
   char *saved_ptr;
-  char *cmd_name = strtok_r(file_name, " ", &saved_ptr);
+  char copied_file_name[256]; strlcpy(copied_file_name, file_name, strlen(file_name));
+  char *cmd_name = strtok_r(copied_file_name, " ", &saved_ptr);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -74,6 +75,8 @@ start_process (void *file_name_)
     // 인자들을 parsing하고, 유저 스택을 채운다.
     argument_stack(file_name, &if_.esp);
   }
+
+  hex_dump(if_.esp,if_.esp, PHYS_BASE-if_.esp,1);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -121,7 +124,6 @@ static void argument_stack(char *file_name, void **esp){
   token = strtok_r(stored_file_name, " ", &saved_ptr);
 
   for (i = 0; i < argc; i++) {
-    //len = strlen(token);
     // 현재 토큰을 argv에 넣는다.
     argv[i] = token;
 
