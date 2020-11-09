@@ -32,7 +32,7 @@ syscall_handler (struct intr_frame *f)
       syscall_halt();
       break;
     case SYS_EXIT:
-      get_arguments (f->esp, arg, 1, f->esp); // 인자: 1개
+      get_argument(f->esp, arg, 1); // 인자: 1개
       syscall_exit(arg[0]);
       break;
     case SYS_EXEC:
@@ -40,11 +40,11 @@ syscall_handler (struct intr_frame *f)
     case SYS_WAIT:
       break;
     case SYS_CREATE:
-      get_arguments (f->esp, arg, 2, f->esp); // 인자: 2개
+      get_argument(f->esp, arg, 2); // 인자: 2개
       f->eax = syscall_create((const char *) arg[0], arg[1]); // 계산 후 결과를 eax에 저장
       break;
     case SYS_REMOVE:
-      get_arguments (f->esp, arg, 1, f->esp); // 인자: 1개
+      get_argument(f->esp, arg, 1); // 인자: 1개
       f->eax = syscall_remove((const char *) arg[0]); // 계산 후 결과를 eax에 저장
       break;
     case SYS_OPEN:
