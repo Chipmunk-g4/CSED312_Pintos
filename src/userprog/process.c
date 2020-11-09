@@ -76,7 +76,7 @@ start_process (void *file_name_)
     argument_stack(file_name, &if_.esp);
   }
 
-  hex_dump(if_.esp,if_.esp, PHYS_BASE-if_.esp,1);
+  //hex_dump(if_.esp,if_.esp, PHYS_BASE-if_.esp,1);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
