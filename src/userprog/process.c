@@ -61,7 +61,7 @@ start_process (void *file_name_)
 
   // argument가 없는 파일 이름을 cmd_name에 저장한다.
   char *saved_ptr;
-  char copied_file_name[256]; strlcpy(copied_file_name, file_name, strlen(file_name));
+  char copied_file_name[256]; strlcpy(copied_file_name, file_name, strlen(file_name)+1);
   char *cmd_name = strtok_r(copied_file_name, " ", &saved_ptr);
 
   /* Initialize interrupt frame and load executable. */
