@@ -182,11 +182,27 @@ static void argument_stack(char *file_name, void **esp){
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid)
 {
-  // 반복문으로 부모 프로세스가 바로 끝나지 않게 조금 지연시키자.
-  int i;
-  for (i = 0; i < 1000000000; i++);
+//  현재 thread의 child_list
+  struct list c_thread_list = thread_current()->child_list;
+
+//  c_thread_list를 탐방하면서 wait를 해야하는 child thread id와 같은 id를 찾는다.
+  for (struct list_elem * e = list_begin(&c_thread_list); e != list_end(&c_thread_list); e = list_next(e)) {
+//    현재 elem의 thread
+    struct thread * e_thread = list_entry(e, struct thread, child_elem);
+    if(e_thread->tid == child_tid) {
+//      thread의 sema_down 호출 (value가 0이 아닐때 까지 wait한다.)
+      sema_down(&(e_thread->child_sema));
+//      기다린 후 wait를 마친 child process는 list에서 제거한다.
+      list_remove(&(e_thread->child_elem));
+//      child_process의 값을 읽어와 저장해두어야 child process를 종료하고 나서도 return code를 유지할 수 있다.
+      int exit_code = e_thread->exit_code;
+      sema_up(&(e_thread->parent_sema));
+      return exit_code;
+    }
+  }
+
   return -1;
 }
 
@@ -213,6 +229,10 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+//  child process가 종료되었기 떄문에 sema value를 하나 증가시켜 process_wait에서 sema_down을 호출할 수 있도록 한다.
+  sema_up(&(cur->child_sema));
+//  종료되기 이전에 parent thread에서 값을 모두 읽어와 sema_up을 호출하여 value가 0이 아닐때 까지 wait한다.
+  sema_down(&(cur->parent_sema));
 }
 
 /* Sets up the CPU for running user code in the current
