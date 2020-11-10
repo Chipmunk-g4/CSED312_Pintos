@@ -46,11 +46,11 @@ syscall_handler (struct intr_frame *f)
       break;
     case SYS_EXEC:
       get_argument(f->esp, arg, 1); // 인자: 1개
-      syscall_exec(arg[0]);
+      f -> eax = syscall_exec(arg[0]); // 계산 후 결과를 eax에 저장
       break;
     case SYS_WAIT:
       get_argument(f->esp, arg, 1); // 인자: 1개
-      syscall_wait(arg[0]);
+      f->eax = syscall_wait(arg[0]); // 계산 후 결과를 eax에 저장
       break;
     case SYS_CREATE:
       get_argument(f->esp, arg, 2); // 인자: 2개
