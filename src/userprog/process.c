@@ -184,7 +184,12 @@ static void argument_stack(char *file_name, void **esp){
 int
 process_wait (tid_t child_tid)
 {
-  /*
+  /* parent process는 child process가 종료할 때 까지 기다려야 한다.
+   * parent thread의 child_list에서는 child process 들을 저장하고 있으므로 이를 탐색하여 특정 child를 찾는다.
+   * 찾은 thread가 종료될 떄 까지 sema_down으로 대기를 하다가 child process가 process_exit을 호출하고, sema_up을 수행한다.
+   * (그동안 parent process에서 값을 읽을 수 있도록 sema_down으로 대기한다.)
+   * parent thread에서는 child process의 return value를 읽어오고 list에서 제거한다.
+   * 필요한 값을 다 불러왔으면 child process가 종료할 수 있도록 sema_up을 호출한다.
    * */
 
 //  현재 thread의 child_list
