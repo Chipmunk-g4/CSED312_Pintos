@@ -616,7 +616,7 @@ init_thread (struct thread *t, const char *name, int priority)
   #ifdef USERPROG
 //    child list를 초기화 하고, thread t를 running thread의 child로 집어넣는다. (running thread에서 생성하였으므로)
     list_init(&(t->child_list));
-    list_push_back(&(running_thread()->child_list), &(t->child_elem);
+    list_push_back(&(running_thread()->child_list), &(t->child_elem));
     t->exit_code = -1;
     sema_init(&(t->child_sema), 0);           /* child process의 join을 기다리는 semaphore이기 때문에 0으로 초기화*/
     sema_init(&(t->parent_sema), 0);           /* parent process가 child process의 값을 다 읽어올 때까지 기다려야 하므로 0으로 초기화*/
