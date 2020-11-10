@@ -107,6 +107,10 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct list_elem child_elem;        /* parent의 child_list 변수에 들어가는 원소. */
+    struct list child_list;             /* child thread들을 관리하는 list. thread의 child_elem을 원소로 가짐. */
+    int exit_code;                      /* child thread의 exit code를 저장하여 parent thread에서 값을 읽기 위한 변수. */
+    struct semaphore child_sema;        /* child process의 exit을 기다려주기 위해서 semaphore를 이용 */
 #endif
 
     /* Owned by thread.c. */
