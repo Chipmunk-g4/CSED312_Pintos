@@ -184,6 +184,9 @@ static void argument_stack(char *file_name, void **esp){
 int
 process_wait (tid_t child_tid)
 {
+  /*
+   * */
+
 //  현재 thread의 child_list
   struct list c_thread_list = thread_current()->child_list;
 
@@ -194,10 +197,10 @@ process_wait (tid_t child_tid)
     if(e_thread->tid == child_tid) {
 //      thread의 sema_down 호출 (value가 0이 아닐때 까지 wait한다.)
       sema_down(&(e_thread->child_sema));
-//      기다린 후 wait를 마친 child process는 list에서 제거한다.
-      list_remove(&(e_thread->child_elem));
 //      child_process의 값을 읽어와 저장해두어야 child process를 종료하고 나서도 return code를 유지할 수 있다.
       int exit_code = e_thread->exit_code;
+//      기다린 후 wait를 마친 child process는 list에서 제거한다.
+      list_remove(&(e_thread->child_elem));
       sema_up(&(e_thread->parent_sema));
       return exit_code;
     }
