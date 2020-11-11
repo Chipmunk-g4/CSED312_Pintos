@@ -6,6 +6,8 @@
 #include "devices/shutdown.h"
 #include "filesys/filesys.h"
 #include "threads/vaddr.h"
+#include "userprog/process.h"
+#include "filesys/file.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -18,8 +20,13 @@ tid_t syscall_exec(const char *cmd_line);
 int syscall_wait (tid_t pid);
 bool syscall_create (const char *file , unsigned initial_size);
 bool syscall_remove (const char *file);
+int syscall_open (const char* file);
+int syscall_filesize(int fd);
 int syscall_read(int fd, void *buffer, unsigned size);
 int syscall_write(int fd, const void *buffer, unsigned size);
+void syscall_seek (int fd, unsigned position);
+unsigned syscall_tell (int fd);
+void syscall_close (int fd);
 
 void check_addr_user(void *addr);
 // 아직까지 모든 syscall은 임시적인 단계로 계속 수정이 필요하다.
@@ -63,8 +70,12 @@ syscall_handler (struct intr_frame *f)
       f->eax = syscall_remove((const char *) arg[0]); // 계산 후 결과를 eax에 저장
       break;
     case SYS_OPEN:
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      f->eax = syscall_open((const char *) arg[0]); // 계산 후 결과를 eax에 저장
       break;
     case SYS_FILESIZE:
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      f->eax = syscall_filesize((int) arg[0]); // 계산 후 결과를 eax에 저장
       break;
     case SYS_READ:
       get_argument(f->esp, arg, 3); // 인자: 3개
@@ -75,10 +86,16 @@ syscall_handler (struct intr_frame *f)
       f->eax = syscall_write(arg[0],arg[1],arg[2]);
       break;
     case SYS_SEEK:
+      get_argument(f->esp, arg, 2); // 인자: 2개
+      syscall_create((int)arg[0], (unsigned)arg[1]);
       break;
     case SYS_TELL:
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      f->eax = syscall_tell((int) arg[0]); // 계산 후 결과를 eax에 저장
       break;
     case SYS_CLOSE:
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      syscall_close((int) arg[0]);
       break;
     default:
       // 유효하지 않은 syscall
@@ -179,24 +196,95 @@ bool syscall_remove (const char *file){
   return filesys_remove (file);
 }
 
+// open 시스템 콜
+int syscall_open (const char* file){
+  int result;
+
+  // 미리 만들어둔 process_add_file함수를 사용하여 파일을 프로세스에 추가한다.
+  result = process_add_file (filesys_open (file));
+
+  return result;
+}
+
+// filesize 시스템 콜
+int syscall_filesize(int fd){
+  // 미리 만들어둔 함수로 파일을 프로세스에서 가져온다.
+  struct file *tmp = process_get_file (fd);
+
+  // 만약 비어있는 경우 -1을 반환한다. 그렇지 않으면 파일 길이를 반환한다.
+  return (tmp == NULL) ? -1 : file_length(tmp);
+}
+
 // read 시스템 콜
 int syscall_read(int fd, void *buffer, unsigned size){
   int i;
+  // STDIN인 경우 키보드로부터 값을 입력받는다.
   if (fd == 0) {
     for (i = 0; i < size; i ++) {
       if (((char *)buffer)[i] == '\0') {
         break;
       }
     }
+
+    return i; // 입력받은 바이트 수 반환
+  }
+  else(fd >= 2){ // 그 외의 경우
+    // fd 자리에 파일이 없는 경우
+    if(process_get_file (fd) == NULL){
+      return -1; // 실패시 -1 반환
+    }
+    // 파일이 있는 경우
+    else{ 
+      size = file_read (process_get_file (fd), buffer, size);
+      return  size;// 데이터를 입력받고 size를 반환한다.
+    }
   }
 
-  return i;
+  return -1; //실패
 }
 
+// write 시스템 콜
 int syscall_write(int fd, const void *buffer, unsigned size){
+  // STDOUT인 경우 화면에 출력
   if (fd == 1) {
     putbuf(buffer, size);
     return size;
   }
+  else if(fd >= 2){ // fd값이 2 이상인 경우 
+    // fd 자리에 파일이 없는 경우
+    if(process_get_file (fd) == NULL){
+      return -1; // 실패시 -1 반환
+    }
+    // 파일이 있는 경우
+    else{ 
+      size = file_write (process_get_file (fd), buffer, size);
+      return  size;// 데이터를 기록하고 size를 반환한다.
+    }
+  }
   return -1;
+}
+
+// seek 시스템 콜
+void syscall_seek (int fd, unsigned position){
+  struct file *tmp = process_get_file (fd);
+  // 파일이 비어있으면 무시
+  if (tmp == NULL) return;
+
+  // 파일 offset 변경
+  file_seek (tmp, position);  
+}
+
+unsigned syscall_tell (int fd){
+  struct file *tmp = process_get_file (fd);
+  // 파일이 비어있으면 -1 반환
+  if (tmp == NULL) return -1;
+
+  // 파일의 offset 반환
+  return file_tell (tmp);
+}
+
+// close 시스템 콜
+void syscall_close (int fd){
+  // 미리 구현한 함수를 통해 파일을 닫는다.
+  process_close_file (fd);
 }
