@@ -194,6 +194,7 @@ process_wait (tid_t child_tid)
    * 필요한 값을 다 불러왔으면 child process가 종료할 수 있도록 sema_up을 호출한다.
    * */
 
+  /*
   // 현재 thread의 child_list
   struct list c_thread_list = thread_current()->child_list;
 
@@ -214,6 +215,25 @@ process_wait (tid_t child_tid)
   }
 
   return -1;
+  */
+
+  struct thread *child;
+  int exit_code;
+
+  // child가 더이상 없는 경우 여기서 종료시킨다.
+  if (!(child = thread_get_child(child_tid)))
+    return -1;
+
+  // 자식 프로세스가 종료될 때 까지 기다린다.
+  sema_down (&child->child_sema);
+  // 종료되면 자식 프로세스를 현재 프로세스의 자식 list에서 삭제한다.
+  list_remove (&child->child_elem);
+  // 자식 프로세스의 exit_code를 얻어온다.
+  exit_code = child->exit_code;
+  // 자식 프로세스를 완전히 제거하도록 세마포어를 올린다.
+  sema_up (&child->parent_sema);
+  
+  return exit_code;
 }
 
 /* Free the current process's resources. */
@@ -239,10 +259,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-//  child process가 종료되었기 떄문에 sema value를 하나 증가시켜 process_wait에서 sema_down을 호출할 수 있도록 한다.
-  sema_up(&(cur->child_sema));
-//  종료되기 이전에 parent thread에서 값을 모두 읽어와 sema_up을 호출하여 value가 0이 아닐때 까지 wait한다.
-  sema_down(&(cur->parent_sema));
 }
 
 /* Sets up the CPU for running user code in the current

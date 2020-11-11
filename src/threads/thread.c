@@ -303,6 +303,20 @@ thread_exit (void)
   process_exit ();
 #endif
 
+  // 현재 프로세스로 부터 wait를 하지 않은 모든 자식 프로세스를 자식 리스트에서 제거하여 자유롭게 만든다.
+  struct list_elem *child;
+  for (child = list_begin (&thread_current ()->child_list); child != list_end (&thread_current ()->child_list); )
+    {
+      struct thread *t = list_entry (child, struct thread, child_elem);
+      child = list_remove (child);
+      sema_up (&t->parent_sema);
+    }
+
+//  child process가 종료되었기 떄문에 sema value를 하나 증가시켜 process_wait에서 sema_down을 호출할 수 있도록 한다.
+  sema_up(&(thread_current()->child_sema));
+//  종료되기 이전에 parent thread에서 값을 모두 읽어와 sema_up을 호출하여 value가 0이 아닐때 까지 wait한다.
+  sema_down(&(thread_current()->parent_sema));
+
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
