@@ -115,8 +115,9 @@ struct thread
     /* child process가 종료되고 나서 parent process에서 child thread의 값을 읽어올 때 동기화를 위해 이용.
      * parent process가 값을 다 읽고난 이후에 sema_up을 호출하여 child process 종료*/
     struct semaphore parent_sema;
-    struct semaphore load_sema; //check load success
+    struct semaphore load_sema; //check load success, load가 완료되면 증가, 부모가 load가 완료되는 것을 기다리면 감소
     bool load_complete; // true: load good, false: load bad
+    struct file* fd[128]; // 파일 디스크립터 이다.
 #endif
 
     /* Owned by thread.c. */
