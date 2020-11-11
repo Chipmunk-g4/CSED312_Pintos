@@ -5,6 +5,7 @@
 #include "threads/thread.h"
 #include "devices/shutdown.h"
 #include "filesys/filesys.h"
+#include "threads/vaddr.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -20,6 +21,7 @@ bool syscall_remove (const char *file);
 int syscall_read(int fd, void *buffer, unsigned size);
 int syscall_write(int fd, const void *buffer, unsigned size);
 
+void check_addr_user(void *addr);
 // 아직까지 모든 syscall은 임시적인 단계로 계속 수정이 필요하다.
 
 void
@@ -106,12 +108,22 @@ void get_argument(int *esp, int *arg, int count){
     esp++;
 
     // check whether bound of esp is legal
-    check_valid_address (esp);
-    check_valid_address (esp+3);
+//    check_valid_address (esp);
+//    check_valid_address (esp+3);
+
+    check_addr_user(esp);
+    check_addr_user(esp+3);
 
     // get value
     *(arg++) = *esp;
   }
+}
+
+// check address is in user memory or not
+// if not then call system call exit with -1
+void check_addr_user(void *addr) {
+  if (!is_user_vaddr(addr))
+    syscall_exit(-1);
 }
 
 // 3. Syscall 함수들            -------------------------
