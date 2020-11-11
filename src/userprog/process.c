@@ -357,8 +357,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-// 성공적으로 파일을 연 경우 file에 쓰기를 방지한다.
-//  file_deny_write(file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -444,8 +442,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
-//  load에서 file_close를 호출하고 난 이후에 file write allow를 해준다.
-//  file_allow_write(file);
   return success;
 }
 
@@ -600,7 +596,7 @@ install_page (void *upage, void *kpage, bool writable)
 // 파일 객체 f를 입력받아 현재 프로세스의 파일 디스크립터에 입력한다
 // 그리고 해당 파일의 fd값을 반환한다.
 // 이때 f가 NULL인 경우 -1을 반환한다.
-int process_add_file(struct file *f){
+int process_add_file(struct file *f, const char* file){
 
   int i;
 
@@ -610,8 +606,12 @@ int process_add_file(struct file *f){
   // 비어있는 곳을 찾아서 넣는다.
   for(i=3;i<128;i++){
     if(thread_current()->fd[i] == NULL){
-       thread_current()->fd[i] = f;
-       break;
+      // open에서 파일을 담을 때 thread_name과 file이름을 비교하여 같으면 (현재 파일이 실행중) 
+      // file_deny_write를 통해 파일을 잠근다.
+      if (strcmp(thread_current()->name, file) == 0) {file_deny_write(f);} 
+
+      thread_current()->fd[i] = f;
+      break;
     }
   }
 

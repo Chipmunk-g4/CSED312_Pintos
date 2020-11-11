@@ -9,6 +9,7 @@
 #include "userprog/process.h"
 #include "filesys/file.h"
 #include "threads/vaddr.h"
+#include "filesys/inode.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -217,7 +218,7 @@ int syscall_open (const char* file){
   if (file == NULL) {syscall_exit(-1);}
 
   // 미리 만들어둔 process_add_file함수를 사용하여 파일을 프로세스에 추가한다.
-  result = process_add_file (filesys_open (file));
+  result = process_add_file (filesys_open (file), file);
 
   lock_release(&locking_file); // lock off
   return result;
@@ -235,11 +236,12 @@ int syscall_filesize(int fd){
 // read 시스템 콜
 int syscall_read(int fd, void *buffer, unsigned size){
   int i;
+  int result;
 
   // if buffer out of border exit(-1)
   check_valid_address(buffer);
 
-  //lock_acquire(&locking_file); //lock on
+  lock_acquire(&locking_file); //lock on
 
   // STDIN인 경우 키보드로부터 값을 입력받는다.
   if (fd == 0) {
@@ -248,51 +250,54 @@ int syscall_read(int fd, void *buffer, unsigned size){
         break;
       }
     }
-    //lock_release(&locking_file); // lock off
-    return i; // 입력받은 바이트 수 반환
+    result = i; // 입력받은 바이트 수 반환
   }
   else if(fd >= 2){ // 그 외의 경우
     // fd 자리에 파일이 없는 경우
     if(process_get_file (fd) == NULL){
-      //lock_release(&locking_file); // lock off
-      return -1; // 실패시 -1 반환
+      lock_release(&locking_file); // lock off
+      syscall_exit(-1); // 실패시 -1 반환
     }
     // 파일이 있는 경우
     else{ 
       size = file_read (process_get_file (fd), buffer, size);
-      //lock_release(&locking_file); // lock off
-      return  size;// 데이터를 입력받고 size를 반환한다.
+      result = size;// 데이터를 입력받고 size를 반환한다.
     }
   }
 
-  syscall_exit(-1); //실패
+  lock_release(&locking_file); // lock off
+  return result;
 }
 
 // write 시스템 콜
 int syscall_write(int fd, const void *buffer, unsigned size){
+  int result;
 
-  //lock_acquire(&locking_file); //lock on
+  lock_acquire(&locking_file); //lock on
 
   // STDOUT인 경우 화면에 출력
   if (fd == 1) {
     putbuf(buffer, size);
-    //lock_release(&locking_file); // lock off
-    return size;
+    result = size;
   }
   else if(fd >= 2){ // fd값이 2 이상인 경우 
     // fd 자리에 파일이 없는 경우
     if(process_get_file (fd) == NULL){
-      //lock_release(&locking_file); // lock off
-      return -1; // 실패시 -1 반환
+      lock_release(&locking_file); // lock off
+      syscall_exit(-1); // 실패시 -1 반환
     }
+    // fd의 deny_write가 1인 경우, 
+    // file_deny_write함수를 통해 파일을 잠궈 접근을 못하게 막는다.
+    if (process_get_file(fd)->deny_write) {
+        file_deny_write(thread_current()->fd[fd]);
+    }
+
     // 파일이 있는 경우
-    else{ 
-      size = file_write (process_get_file (fd), buffer, size);
-      //lock_release(&locking_file); // lock off
-      return  size;// 데이터를 기록하고 size를 반환한다.
-    }
+    size = file_write (process_get_file (fd), buffer, size);
+    result = size;// 데이터를 기록하고 size를 반환한다.
   }
-  return -1;
+  lock_release(&locking_file); // lock off
+  return result;
 }
 
 // seek 시스템 콜
