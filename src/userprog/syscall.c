@@ -273,6 +273,9 @@ int syscall_read(int fd, void *buffer, unsigned size){
 int syscall_write(int fd, const void *buffer, unsigned size){
   int result;
 
+  // if buffer out of border exit(-1)
+  check_valid_address(buffer);
+
   lock_acquire(&locking_file); //lock on
 
   // STDOUT인 경우 화면에 출력
