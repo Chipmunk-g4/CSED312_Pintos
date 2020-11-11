@@ -186,12 +186,16 @@ int syscall_wait (tid_t pid){
 
 // create 시스템 콜
 bool syscall_create (const char *file , unsigned initial_size){
+  // we don't accept NULL file
+  if (file == NULL) {syscall_exit(-1);}
   // 파일을 생성한다.
   return filesys_create (file, initial_size);
 }
 
 // remove 시스템 콜
 bool syscall_remove (const char *file){
+  // we don't accept NULL file
+  if (file == NULL) {syscall_exit(-1);}
   // 파일을 삭제한다.
   return filesys_remove (file);
 }
@@ -199,6 +203,9 @@ bool syscall_remove (const char *file){
 // open 시스템 콜
 int syscall_open (const char* file){
   int result;
+
+  // we don't accept NULL file
+  if (file == NULL) {syscall_exit(-1);}
 
   // 미리 만들어둔 process_add_file함수를 사용하여 파일을 프로세스에 추가한다.
   result = process_add_file (filesys_open (file));
