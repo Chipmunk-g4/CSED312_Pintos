@@ -622,7 +622,8 @@ init_thread (struct thread *t, const char *name, int priority)
     sema_init(&(t->child_sema), 0);           /* child process의 join을 기다리는 semaphore이기 때문에 0으로 초기화*/
     sema_init(&(t->parent_sema), 0);           /* parent process가 child process의 값을 다 읽어올 때까지 기다려야 하므로 0으로 초기화*/
     sema_init(&(t->load_sema), 0);
-    for(i=0; t->fd[i] = NULL, i<128;i++); // 파일 디스크립터를 초기화한다.
+    // 파일 디스크립터를 초기화한다.
+    for (i = 0; i < 128; i++) {t->fd[i] = NULL;} 
   #endif
 
   old_level = intr_disable ();
