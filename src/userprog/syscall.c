@@ -8,6 +8,7 @@
 #include "threads/vaddr.h"
 #include "userprog/process.h"
 #include "filesys/file.h"
+#include "threads/vaddr.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -31,10 +32,16 @@ void syscall_close (int fd);
 void check_addr_user(void *addr);
 // 아직까지 모든 syscall은 임시적인 단계로 계속 수정이 필요하다.
 
+// lock for one by one access
+struct lock locking_file;
+
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+
+  // initial setting lock
+  lock_init(&locking_file);
 }
 
 static void
@@ -87,7 +94,7 @@ syscall_handler (struct intr_frame *f)
       break;
     case SYS_SEEK:
       get_argument(f->esp, arg, 2); // 인자: 2개
-      syscall_create((int)arg[0], (unsigned)arg[1]);
+      syscall_seek((int)arg[0], (unsigned)arg[1]);
       break;
     case SYS_TELL:
       get_argument(f->esp, arg, 1); // 인자: 1개
@@ -108,7 +115,7 @@ syscall_handler (struct intr_frame *f)
 // 입력되는 주소가 유효한지 검사한다.
 void check_valid_address(void *address){
   // address가 0x08048000~0xc0000000 사이 (유저영역)에 있는지 검사한다.
-  if(!(0xc0000000UL >= address && address >= (void *)0x08048000UL)){
+  if (!(is_user_vaddr (address) && address >= (void *)0x08048000UL)){
     // 올바른 주소가 아니므로 프로세스를 종료시킨다.
     syscall_exit(-1);
   }
@@ -125,8 +132,8 @@ void get_argument(int *esp, int *arg, int count){
     esp++;
 
     // check whether bound of esp is legal
-//    check_valid_address (esp);
-//    check_valid_address (esp+3);
+    check_valid_address (esp);
+    check_valid_address (esp+3);
 
     check_addr_user(esp);
     check_addr_user(esp+3);
@@ -204,12 +211,15 @@ bool syscall_remove (const char *file){
 int syscall_open (const char* file){
   int result;
 
+  lock_acquire(&locking_file); //lock on
+
   // we don't accept NULL file
   if (file == NULL) {syscall_exit(-1);}
 
   // 미리 만들어둔 process_add_file함수를 사용하여 파일을 프로세스에 추가한다.
   result = process_add_file (filesys_open (file));
 
+  lock_release(&locking_file); // lock off
   return result;
 }
 
@@ -225,6 +235,12 @@ int syscall_filesize(int fd){
 // read 시스템 콜
 int syscall_read(int fd, void *buffer, unsigned size){
   int i;
+
+  // if buffer out of border exit(-1)
+  check_valid_address(buffer);
+
+  //lock_acquire(&locking_file); //lock on
+
   // STDIN인 경우 키보드로부터 값을 입력받는다.
   if (fd == 0) {
     for (i = 0; i < size; i ++) {
@@ -232,39 +248,47 @@ int syscall_read(int fd, void *buffer, unsigned size){
         break;
       }
     }
-
+    //lock_release(&locking_file); // lock off
     return i; // 입력받은 바이트 수 반환
   }
   else if(fd >= 2){ // 그 외의 경우
     // fd 자리에 파일이 없는 경우
     if(process_get_file (fd) == NULL){
+      //lock_release(&locking_file); // lock off
       return -1; // 실패시 -1 반환
     }
     // 파일이 있는 경우
     else{ 
       size = file_read (process_get_file (fd), buffer, size);
+      //lock_release(&locking_file); // lock off
       return  size;// 데이터를 입력받고 size를 반환한다.
     }
   }
 
-  return -1; //실패
+  syscall_exit(-1); //실패
 }
 
 // write 시스템 콜
 int syscall_write(int fd, const void *buffer, unsigned size){
+
+  //lock_acquire(&locking_file); //lock on
+
   // STDOUT인 경우 화면에 출력
   if (fd == 1) {
     putbuf(buffer, size);
+    //lock_release(&locking_file); // lock off
     return size;
   }
   else if(fd >= 2){ // fd값이 2 이상인 경우 
     // fd 자리에 파일이 없는 경우
     if(process_get_file (fd) == NULL){
+      //lock_release(&locking_file); // lock off
       return -1; // 실패시 -1 반환
     }
     // 파일이 있는 경우
     else{ 
       size = file_write (process_get_file (fd), buffer, size);
+      //lock_release(&locking_file); // lock off
       return  size;// 데이터를 기록하고 size를 반환한다.
     }
   }

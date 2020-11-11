@@ -603,15 +603,16 @@ install_page (void *upage, void *kpage, bool writable)
 int process_add_file(struct file *f){
 
   int i;
-  struct thread *cur = thread_current();
 
   // f가 NULL이면 -1을 반환
   if(f == NULL) return -1;
 
   // 비어있는 곳을 찾아서 넣는다.
   for(i=3;i<128;i++){
-    if(cur->fd[i] == NULL) cur->fd[i] = f;
-    break;
+    if(thread_current()->fd[i] == NULL){
+       thread_current()->fd[i] = f;
+       break;
+    }
   }
 
   // fd를 반환한다.
