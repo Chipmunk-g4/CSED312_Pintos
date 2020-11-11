@@ -228,7 +228,7 @@ int syscall_read(int fd, void *buffer, unsigned size){
 
     return i; // 입력받은 바이트 수 반환
   }
-  else(fd >= 2){ // 그 외의 경우
+  else if(fd >= 2){ // 그 외의 경우
     // fd 자리에 파일이 없는 경우
     if(process_get_file (fd) == NULL){
       return -1; // 실패시 -1 반환
