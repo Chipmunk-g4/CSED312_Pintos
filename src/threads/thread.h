@@ -115,6 +115,8 @@ struct thread
     /* child process가 종료되고 나서 parent process에서 child thread의 값을 읽어올 때 동기화를 위해 이용.
      * parent process가 값을 다 읽고난 이후에 sema_up을 호출하여 child process 종료*/
     struct semaphore parent_sema;
+    struct semaphore load_sema; //check load success
+    bool load_complete; // true: load good, false: load bad
 #endif
 
     /* Owned by thread.c. */
@@ -165,4 +167,6 @@ bool donor_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUS
 void donate_priority(struct thread* donor, struct thread* donee);
 void set_mlfqs_recent_cpu(struct thread *t);
 void set_mlfqs_priority(struct thread *t);
+struct thread *thread_get_child (tid_t tid);
+
 #endif /* threads/thread.h */

@@ -140,13 +140,26 @@ void
 syscall_exit (int exit_code)
 {
   struct thread * current_thread = thread_current();
+  thread_current()->exit_code = exit_code;
   printf("%s: exit(%d)\n", current_thread->name, exit_code);
   thread_exit ();
 }
 
 // exec 시스템 콜
 tid_t syscall_exec(const char *cmd_line){
-  return process_execute(cmd_line);
+
+  tid_t tid;
+  struct thread *child;
+
+  tid = process_execute (cmd_line);
+  child = thread_get_child (tid);
+
+  sema_down (&child->load_sema);
+
+  // if no file, return error
+  if(!child->load_complete) return -1;
+
+  return tid;
 }
 
 // wait 시스템 콜

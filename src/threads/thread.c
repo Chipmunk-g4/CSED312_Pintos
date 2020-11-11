@@ -620,6 +620,7 @@ init_thread (struct thread *t, const char *name, int priority)
     t->exit_code = -1;
     sema_init(&(t->child_sema), 0);           /* child process의 join을 기다리는 semaphore이기 때문에 0으로 초기화*/
     sema_init(&(t->parent_sema), 0);           /* parent process가 child process의 값을 다 읽어올 때까지 기다려야 하므로 0으로 초기화*/
+    sema_init(&(t->load_sema), 0);
   #endif
 
   old_level = intr_disable ();
@@ -775,3 +776,17 @@ void donate_priority(struct thread* donor, struct thread* donee){
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+// 현재 스래드의 자식 중 tid를 가지는 자식을 반환한다.
+// 만약 없으면 NULL반환 
+struct thread *thread_get_child (tid_t tid){
+  struct list_elem *e;
+  // 현재 스레드의 자식 리스트를 전부 탐색한다.
+  for (e = list_begin (&thread_current ()->child_list); e != list_end (&thread_current ()->child_list); e = list_next (e)){
+      struct thread *t = list_entry (e, struct thread, child_elem);
+      // 찾은 경우 반환
+      if (t->tid == tid) return t;
+  }
+  // 없는 경우 NULL
+  return NULL;
+}
