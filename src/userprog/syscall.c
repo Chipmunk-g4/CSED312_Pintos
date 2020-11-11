@@ -146,6 +146,17 @@ syscall_exit (int exit_code)
 
 // exec 시스템 콜
 tid_t syscall_exec(const char *cmd_line){
+  //cmd_line을 실행하는 자식의 tid가져오기
+  tid_t tid = process_execute(cmd_line);
+  // tid를 가지는 자식 스레드를 가져오기
+  struct thread *child = thread_get_child(tid);
+  // load_sema 감소
+  sema_down (&child->load_sema);
+
+  // load가 실패하는 경우 에러반환
+  if(!child->load_succeeded)
+    return TID_ERROR;
+
   return process_execute(cmd_line);
 }
 

@@ -57,7 +57,7 @@ start_process (void *file_name_)
 {
   char *file_name = file_name_;
   struct intr_frame if_;
-  bool success;
+  struct thread* t = thread_current(); // 현재 스레드 가져오기
 
   // argument가 없는 파일 이름을 cmd_name에 저장한다.
   char *saved_ptr;
@@ -69,9 +69,11 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (cmd_name, &if_.eip, &if_.esp);
+  t->load_succeeded = load (cmd_name, &if_.eip, &if_.esp); // load 성공 여부 저장
 
-  if(success){
+  sema_up (&t->load_sema); // 현재 프로세스에서 exec 함수를 수행해도 좋다.
+
+  if(t->load_succeeded){
     // 인자들을 parsing하고, 유저 스택을 채운다.
     argument_stack(file_name, &if_.esp);
   }
@@ -80,7 +82,7 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!t->load_succeeded) 
     thread_exit ();
 
   /* Start the user process by simulating a return from an
@@ -192,19 +194,19 @@ process_wait (tid_t child_tid)
    * 필요한 값을 다 불러왔으면 child process가 종료할 수 있도록 sema_up을 호출한다.
    * */
 
-//  현재 thread의 child_list
+  // 현재 thread의 child_list
   struct list c_thread_list = thread_current()->child_list;
 
-//  c_thread_list를 탐방하면서 wait를 해야하는 child thread id와 같은 id를 찾는다.
+  //  c_thread_list를 탐방하면서 wait를 해야하는 child thread id와 같은 id를 찾는다.
   for (struct list_elem * e = list_begin(&c_thread_list); e != list_end(&c_thread_list); e = list_next(e)) {
-//    현재 elem의 thread
+    // 현재 elem의 thread
     struct thread * e_thread = list_entry(e, struct thread, child_elem);
     if(e_thread->tid == child_tid) {
-//      thread의 sema_down 호출 (value가 0이 아닐때 까지 wait한다.)
+      // thread의 sema_down 호출 (value가 0이 아닐때 까지 wait한다.)
       sema_down(&(e_thread->child_sema));
-//      child_process의 값을 읽어와 저장해두어야 child process를 종료하고 나서도 return code를 유지할 수 있다.
+      // child_process의 값을 읽어와 저장해두어야 child process를 종료하고 나서도 return code를 유지할 수 있다.
       int exit_code = e_thread->exit_code;
-//      기다린 후 wait를 마친 child process는 list에서 제거한다.
+      // 기다린 후 wait를 마친 child process는 list에서 제거한다.
       list_remove(&(e_thread->child_elem));
       sema_up(&(e_thread->parent_sema));
       return exit_code;

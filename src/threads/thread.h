@@ -108,6 +108,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+#endif
     struct list_elem child_elem;        /* parent의 child_list 변수에 들어가는 원소. */
     struct list child_list;             /* child thread들을 관리하는 list. thread의 child_elem을 원소로 가짐. */
     int exit_code;                      /* child thread의 exit code를 저장하여 parent thread에서 값을 읽기 위한 변수. */
@@ -115,7 +116,8 @@ struct thread
     /* child process가 종료되고 나서 parent process에서 child thread의 값을 읽어올 때 동기화를 위해 이용.
      * parent process가 값을 다 읽고난 이후에 sema_up을 호출하여 child process 종료*/
     struct semaphore parent_sema;
-#endif
+    bool load_succeeded; // load 성공 여부 저장
+    struct semaphore load_sema; // load 완료시 증가, 부모가 exec에서 load가 완료되는걸 대기중에는 감소
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
@@ -165,4 +167,7 @@ bool donor_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUS
 void donate_priority(struct thread* donor, struct thread* donee);
 void set_mlfqs_recent_cpu(struct thread *t);
 void set_mlfqs_priority(struct thread *t);
+
+struct thread *thread_get_child (tid_t);
+
 #endif /* threads/thread.h */
