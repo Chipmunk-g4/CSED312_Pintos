@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -90,14 +91,33 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    int64_t Alarm_tick;                 /* Sleeping thread wakeup tick*/ 
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    /* for project 1 */
+    int64_t alarm_time;
+    /*for priority donation*/
+    struct list_elem semaelem;
+    struct list_elem condelem;
+    int original_priority;
+    struct list donor_thread_list;
+    struct list_elem donorelem;
+    struct lock* waiting_lock;
+    int nice;
+    int recent_cpu;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct list_elem child_elem;        /* parent의 child_list 변수에 들어가는 원소. */
+    struct list child_list;             /* child thread들을 관리하는 list. thread의 child_elem을 원소로 가짐. */
+    int exit_code;                      /* child thread의 exit code를 저장하여 parent thread에서 값을 읽기 위한 변수. */
+    struct semaphore child_sema;        /* child process의 exit을 기다려주기 위해서 semaphore를 이용. */
+    /* child process가 종료되고 나서 parent process에서 child thread의 값을 읽어올 때 동기화를 위해 이용.
+     * parent process가 값을 다 읽고난 이후에 sema_up을 호출하여 child process 종료*/
+    struct semaphore parent_sema;
+    struct semaphore load_sema; //check load success, load가 완료되면 증가, 부모가 load가 완료되는 것을 기다리면 감소
+    bool load_complete; // true: load good, false: load bad
+    struct file* fd[128]; // 파일 디스크립터 이다.
 #endif
 
     /* Owned by thread.c. */
@@ -107,6 +127,7 @@ struct thread
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
+
 extern bool thread_mlfqs;
 
 void thread_init (void);
@@ -125,7 +146,7 @@ struct thread *thread_current (void);
 tid_t thread_tid (void);
 const char *thread_name (void);
 
-void thread_exit (void) NO_RETURN;
+void thread_exit (void) NO_RETURN; 
 void thread_yield (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
@@ -140,10 +161,13 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-void thread_sleep (int64_t ticks);
-void thread_wakeup (int64_t ticks);
-
-int64_t Get_next_wakeup_tick(void);
-void Update_next_wakeup_tick(int64_t ticks);
+bool priority_greater_func(struct list_elem *a, struct list_elem *b, void *aux);
+bool sema_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUSED); 
+bool cond_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
+bool donor_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
+void donate_priority(struct thread* donor, struct thread* donee);
+void set_mlfqs_recent_cpu(struct thread *t);
+void set_mlfqs_priority(struct thread *t);
+struct thread *thread_get_child (tid_t tid);
 
 #endif /* threads/thread.h */

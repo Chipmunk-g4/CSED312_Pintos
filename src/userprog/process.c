@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void argument_stack(char *file_name, void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -38,8 +39,13 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  // argument가 없는 파일 이름을 cmd_name에 저장한다.
+  char *saved_ptr;
+  char copied_file_name[256]; strlcpy(copied_file_name, file_name, strlen(file_name)+1);
+  char *cmd_name = strtok_r(copied_file_name, " ", &saved_ptr);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (cmd_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -52,18 +58,32 @@ start_process (void *file_name_)
 {
   char *file_name = file_name_;
   struct intr_frame if_;
-  bool success;
+  struct thread *cur = thread_current();
+
+  // argument가 없는 파일 이름을 cmd_name에 저장한다.
+  char *saved_ptr;
+  char copied_file_name[256]; strlcpy(copied_file_name, file_name, strlen(file_name)+1);
+  char *cmd_name = strtok_r(copied_file_name, " ", &saved_ptr);
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  cur->load_complete = load (cmd_name, &if_.eip, &if_.esp);
+
+  sema_up (&thread_current()->load_sema);
+
+  if(cur->load_complete){
+    // 인자들을 parsing하고, 유저 스택을 채운다.
+    argument_stack(file_name, &if_.esp);
+  }
+
+  //hex_dump(if_.esp,if_.esp, PHYS_BASE-if_.esp,1);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!cur->load_complete) 
     thread_exit ();
 
   /* Start the user process by simulating a return from an
@@ -76,6 +96,85 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
+// file_name과 esp를 이용하여 argument들을 parsing하고, 유저 스택에 집어 넣는다.
+static void argument_stack(char *file_name, void **esp){
+  // argv, argc, 전체 길이 저장
+  char ** argv;
+  int argc;
+  int total_len;
+
+  // 토큰화를 위한 변수들
+  char stored_file_name[256];
+  char *token;
+  char *saved_ptr;
+  int i;
+  int len;
+  
+  // 파일 이름을 제외한 토큰들을 준비한다.
+  strlcpy(stored_file_name, file_name, strlen(file_name) + 1);
+  token = strtok_r(stored_file_name, " ", &saved_ptr);
+  argc = 0;
+
+  // token의 개수를 세서 argc의 값을 구한다.
+  while (token) {
+    argc += 1;
+    token = strtok_r(NULL, " ", &saved_ptr);
+  }
+
+  // argc의 개수 만큼 저장한 argv의 공간을 마련하고, argv를 구한다.
+  argv = (char **)malloc(sizeof(char *) * argc);
+  strlcpy(stored_file_name, file_name, strlen(file_name) + 1);
+  token = strtok_r(stored_file_name, " ", &saved_ptr);
+
+  for (i = 0; i < argc; i++) {
+    // 현재 토큰을 argv에 넣는다.
+    argv[i] = token;
+
+    // 다음 토큰
+    token = strtok_r(NULL, " ", &saved_ptr);
+  }
+
+  // argv를 스택에 push한다. (이때 가장 마지막에 있던 인자부터 push한다.)
+  total_len = 0;
+  for (i = argc - 1; 0 <= i; i --) {
+    // 저장할 위치로 이동
+    len = strlen(argv[i]) + 1; // '\0'도 포함되어야 한다.
+    *esp -= len;
+    // argv[i]를 현재 위치에 저장
+    strlcpy(*esp, argv[i], len);
+    argv[i] = *esp; // 현재 esp의 위치 값을 argv[i]에 저장한다.
+    // 전체 길이에 추가
+    total_len += len;
+  }
+  
+  // word align을 push한다. (4의 배수로 맞추기 위해 추가한다.)
+  *esp -= (total_len % 4 != 0) ? 4 - (total_len % 4) : 0;
+
+  // Null값을 추가한다.
+  *esp -= 4;
+  **(uint32_t **)esp = 0;
+
+  // argv값들이 저장된 주소를 저장한다.
+  for (i = argc - 1; 0 <= i; i--) {
+    *esp -= 4;
+    **(uint32_t **)esp = argv[i];
+  }
+
+  // argv값들이 저장된 주소들의 주소를 저장한다.
+  *esp -= 4;
+  **(uint32_t **)esp = *esp + 4;
+
+  // argc의 값을 저장한다.
+  *esp -= 4;
+  **(uint32_t **)esp = argc;
+  
+  //  fake address (0)를 저장한다.
+  *esp -= 4;
+  **(uint32_t **)esp = 0;
+
+  free(argv);
+}
+
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -86,9 +185,26 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid)
 {
-  return -1;
+  struct thread *child;
+  int exit_code;
+
+  // child가 더이상 없는 경우 여기서 종료시킨다.
+  if (!(child = thread_get_child(child_tid))){
+    return -1;
+  }
+
+  // 자식 프로세스가 종료될 때 까지 기다린다.
+  sema_down (&child->child_sema);
+  // 종료되면 자식 프로세스를 현재 프로세스의 자식 list에서 삭제한다.
+  list_remove (&child->child_elem);
+  // 자식 프로세스의 exit_code를 얻어온다.
+  exit_code = child->exit_code;
+  // 자식 프로세스를 완전히 제거하도록 세마포어를 올린다.
+  sema_up (&child->parent_sema);
+  
+  return exit_code;
 }
 
 /* Free the current process's resources. */
@@ -97,10 +213,19 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  int i; // 반복문 전용
+
+  // 파일 디스크립터에 들어있는 STDIN, STDOUT을 제외한 모든 파일을 닫는다.
+  for (i = 3; i < 128; i++) {
+      if (cur->fd[i] != NULL) {
+        file_close(cur->fd[i]);
+        cur->fd[i] = NULL;
+      }
+  } 
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
-  pd = cur->pagedir;
+  pd = cur->pagedir;  
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -114,6 +239,10 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+//  child process가 종료되었기 떄문에 sema value를 하나 증가시켜 process_wait에서 sema_down을 호출할 수 있도록 한다.
+  sema_up(&(cur->child_sema));
+//  종료되기 이전에 parent thread에서 값을 모두 읽어와 sema_up을 호출하여 value가 0이 아닐때 까지 wait한다.
+  sema_down(&(cur->parent_sema));
 }
 
 /* Sets up the CPU for running user code in the current
@@ -462,4 +591,57 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+// 파일 객체 f를 입력받아 현재 프로세스의 파일 디스크립터에 입력한다
+// 그리고 해당 파일의 fd값을 반환한다.
+// 이때 f가 NULL인 경우 -1을 반환한다.
+int process_add_file(struct file *f, const char* file){
+
+  int i;
+
+  // f가 NULL이면 -1을 반환
+  if(f == NULL) return -1;
+
+  // 비어있는 곳을 찾아서 넣는다.
+  for(i=3;i<128;i++){
+    if(thread_current()->fd[i] == NULL){
+      // open에서 파일을 담을 때 thread_name과 file이름을 비교하여 같으면 (현재 파일이 실행중) 
+      // file_deny_write를 통해 파일을 잠근다.
+      if (strcmp(thread_current()->name, file) == 0) {file_deny_write(f);} 
+
+      thread_current()->fd[i] = f;
+      break;
+    }
+  }
+
+  // fd를 반환한다.
+  return i;
+}
+
+// 현재 프로세스의 fd값에 해당하는 파일을 불러온다.
+// 0,1 (STDIN, STDOUT)에 접근하거나 파일이 없는 index에 접근하는 경우 NULL을 반환한다.
+struct file *process_get_file(int fd){
+
+  struct thread *cur = thread_current();
+  
+  // 0,1 (STDIN, STDOUT)에 접근하거나 파일이 없는 index에 접근하는 경우 NULL을 반환한다.
+  if(fd<=1 || cur->fd[fd] == NULL) return NULL;
+
+  // 현재 프로세스의 fd값에 해당하는 파일을 불러온다.
+  return cur->fd[fd];
+}
+
+// 현재 프로세스의 fd값에 해당하는 파일을 닫는다.
+// 0,1 (STDIN, STDOUT)에 접근하거나 파일이 없는 index에 접근하는 경우 무시한다.
+void process_close_file(int fd){
+
+  struct thread *cur = thread_current();
+  
+  // 0,1 (STDIN, STDOUT)에 접근하거나 파일이 없는 index에 접근하는 경우 무시한다.
+  if(fd<=1 || cur->fd[fd] == NULL) return;
+
+  // 파일을 닫는다.
+  file_close(cur->fd[fd]);
+  cur->fd[fd] = NULL;
 }
