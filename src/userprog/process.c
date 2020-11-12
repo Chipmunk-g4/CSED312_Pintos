@@ -41,7 +41,8 @@ process_execute (const char *file_name)
 
   // argument가 없는 파일 이름을 cmd_name에 저장한다.
   char *saved_ptr;
-  char *cmd_name = strtok_r((char *) file_name, " ", &saved_ptr);
+  char copied_file_name[256]; strlcpy(copied_file_name, file_name, strlen(file_name)+1);
+  char *cmd_name = strtok_r(copied_file_name, " ", &saved_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (cmd_name, PRI_DEFAULT, start_process, fn_copy);
@@ -57,7 +58,7 @@ start_process (void *file_name_)
 {
   char *file_name = file_name_;
   struct intr_frame if_;
-  bool success;
+  struct thread *cur = thread_current();
 
   // argument가 없는 파일 이름을 cmd_name에 저장한다.
   char *saved_ptr;
@@ -69,9 +70,11 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (cmd_name, &if_.eip, &if_.esp);
+  cur->load_complete = load (cmd_name, &if_.eip, &if_.esp);
 
-  if(success){
+  sema_up (&thread_current()->load_sema);
+
+  if(cur->load_complete){
     // 인자들을 parsing하고, 유저 스택을 채운다.
     argument_stack(file_name, &if_.esp);
   }
@@ -80,7 +83,7 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!cur->load_complete) 
     thread_exit ();
 
   /* Start the user process by simulating a return from an
@@ -184,34 +187,24 @@ static void argument_stack(char *file_name, void **esp){
 int
 process_wait (tid_t child_tid)
 {
-  /* parent process는 child process가 종료할 때 까지 기다려야 한다.
-   * parent thread의 child_list에서는 child process 들을 저장하고 있으므로 이를 탐색하여 특정 child를 찾는다.
-   * 찾은 thread가 종료될 떄 까지 sema_down으로 대기를 하다가 child process가 process_exit을 호출하고, sema_up을 수행한다.
-   * (그동안 parent process에서 값을 읽을 수 있도록 sema_down으로 대기한다.)
-   * parent thread에서는 child process의 return value를 읽어오고 list에서 제거한다.
-   * 필요한 값을 다 불러왔으면 child process가 종료할 수 있도록 sema_up을 호출한다.
-   * */
+  struct thread *child;
+  int exit_code;
 
-//  현재 thread의 child_list
-  struct list c_thread_list = thread_current()->child_list;
-
-//  c_thread_list를 탐방하면서 wait를 해야하는 child thread id와 같은 id를 찾는다.
-  for (struct list_elem * e = list_begin(&c_thread_list); e != list_end(&c_thread_list); e = list_next(e)) {
-//    현재 elem의 thread
-    struct thread * e_thread = list_entry(e, struct thread, child_elem);
-    if(e_thread->tid == child_tid) {
-//      thread의 sema_down 호출 (value가 0이 아닐때 까지 wait한다.)
-      sema_down(&(e_thread->child_sema));
-//      child_process의 값을 읽어와 저장해두어야 child process를 종료하고 나서도 return code를 유지할 수 있다.
-      int exit_code = e_thread->exit_code;
-//      기다린 후 wait를 마친 child process는 list에서 제거한다.
-      list_remove(&(e_thread->child_elem));
-      sema_up(&(e_thread->parent_sema));
-      return exit_code;
-    }
+  // child가 더이상 없는 경우 여기서 종료시킨다.
+  if (!(child = thread_get_child(child_tid))){
+    return -1;
   }
 
-  return -1;
+  // 자식 프로세스가 종료될 때 까지 기다린다.
+  sema_down (&child->child_sema);
+  // 종료되면 자식 프로세스를 현재 프로세스의 자식 list에서 삭제한다.
+  list_remove (&child->child_elem);
+  // 자식 프로세스의 exit_code를 얻어온다.
+  exit_code = child->exit_code;
+  // 자식 프로세스를 완전히 제거하도록 세마포어를 올린다.
+  sema_up (&child->parent_sema);
+  
+  return exit_code;
 }
 
 /* Free the current process's resources. */
@@ -220,10 +213,19 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+  int i; // 반복문 전용
+
+  // 파일 디스크립터에 들어있는 STDIN, STDOUT을 제외한 모든 파일을 닫는다.
+  for (i = 3; i < 128; i++) {
+      if (cur->fd[i] != NULL) {
+        file_close(cur->fd[i]);
+        cur->fd[i] = NULL;
+      }
+  } 
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
-  pd = cur->pagedir;
+  pd = cur->pagedir;  
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
@@ -355,8 +357,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-// 성공적으로 파일을 연 경우 file에 쓰기를 방지한다.
-//  file_deny_write(file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -442,8 +442,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
-//  load에서 file_close를 호출하고 난 이후에 file write allow를 해준다.
-//  file_allow_write(file);
   return success;
 }
 
@@ -593,4 +591,57 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+// 파일 객체 f를 입력받아 현재 프로세스의 파일 디스크립터에 입력한다
+// 그리고 해당 파일의 fd값을 반환한다.
+// 이때 f가 NULL인 경우 -1을 반환한다.
+int process_add_file(struct file *f, const char* file){
+
+  int i;
+
+  // f가 NULL이면 -1을 반환
+  if(f == NULL) return -1;
+
+  // 비어있는 곳을 찾아서 넣는다.
+  for(i=3;i<128;i++){
+    if(thread_current()->fd[i] == NULL){
+      // open에서 파일을 담을 때 thread_name과 file이름을 비교하여 같으면 (현재 파일이 실행중) 
+      // file_deny_write를 통해 파일을 잠근다.
+      if (strcmp(thread_current()->name, file) == 0) {file_deny_write(f);} 
+
+      thread_current()->fd[i] = f;
+      break;
+    }
+  }
+
+  // fd를 반환한다.
+  return i;
+}
+
+// 현재 프로세스의 fd값에 해당하는 파일을 불러온다.
+// 0,1 (STDIN, STDOUT)에 접근하거나 파일이 없는 index에 접근하는 경우 NULL을 반환한다.
+struct file *process_get_file(int fd){
+
+  struct thread *cur = thread_current();
+  
+  // 0,1 (STDIN, STDOUT)에 접근하거나 파일이 없는 index에 접근하는 경우 NULL을 반환한다.
+  if(fd<=1 || cur->fd[fd] == NULL) return NULL;
+
+  // 현재 프로세스의 fd값에 해당하는 파일을 불러온다.
+  return cur->fd[fd];
+}
+
+// 현재 프로세스의 fd값에 해당하는 파일을 닫는다.
+// 0,1 (STDIN, STDOUT)에 접근하거나 파일이 없는 index에 접근하는 경우 무시한다.
+void process_close_file(int fd){
+
+  struct thread *cur = thread_current();
+  
+  // 0,1 (STDIN, STDOUT)에 접근하거나 파일이 없는 index에 접근하는 경우 무시한다.
+  if(fd<=1 || cur->fd[fd] == NULL) return;
+
+  // 파일을 닫는다.
+  file_close(cur->fd[fd]);
+  cur->fd[fd] = NULL;
 }

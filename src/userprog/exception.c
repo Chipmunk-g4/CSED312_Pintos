@@ -150,7 +150,7 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
 //  if fault caused by kernel or fault address is kernel address then exit process with code -1
-  if(!user || is_kernel_vaddr(fault_addr))
+  if(!user || is_kernel_vaddr(fault_addr) || not_present)
     syscall_exit(-1);
 
   /* To implement virtual memory, delete the rest of the function
