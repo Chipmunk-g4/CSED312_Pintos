@@ -18,8 +18,6 @@
 #include "devices/timer.h"
 
 static void block_thread (void *lock_);
-extern struct list* pready_list;
-
 
 void
 test_mlfqs_block (void) 

@@ -76,6 +76,7 @@ test_priority_donate_chain (void)
       snprintf (name, sizeof name, "interloper %d", i);
       thread_create (name, thread_priority - 1, interloper_thread_func, NULL);
     }
+
   lock_release (&locks[0]);
   msg ("%s finishing with priority %d.", thread_name (),
                                          thread_get_priority ());
@@ -85,6 +86,7 @@ static void
 donor_thread_func (void *locks_) 
 {
   struct lock_pair *locks = locks_;
+
   if (locks->first)
     lock_acquire (locks->first);
 

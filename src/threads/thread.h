@@ -4,26 +4,25 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
-  {
-    THREAD_RUNNING,     /* Running thread. */
-    THREAD_READY,       /* Not running but ready to run. */
-    THREAD_BLOCKED,     /* Waiting for an event to trigger. */
-    THREAD_DYING        /* About to be destroyed. */
-  };
+{
+    THREAD_RUNNING, /* Running thread. */
+    THREAD_READY,   /* Not running but ready to run. */
+    THREAD_BLOCKED, /* Waiting for an event to trigger. */
+    THREAD_DYING    /* About to be destroyed. */
+};
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
+#define TID_ERROR ((tid_t)-1) /* Error value for tid_t. */
 
 /* Thread priorities. */
-#define PRI_MIN 0                       /* Lowest priority. */
-#define PRI_DEFAULT 31                  /* Default priority. */
-#define PRI_MAX 63                      /* Highest priority. */
+#define PRI_MIN 0      /* Lowest priority. */
+#define PRI_DEFAULT 31 /* Default priority. */
+#define PRI_MAX 63     /* Highest priority. */
 
 /* A kernel thread or user process.
 
@@ -82,92 +81,98 @@ typedef int tid_t;
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
 struct thread
-  {
+{
     /* Owned by thread.c. */
-    tid_t tid;                          /* Thread identifier. */
-    enum thread_status status;          /* Thread state. */
-    char name[16];                      /* Name (for debugging purposes). */
-    uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
-    struct list_elem allelem;           /* List element for all threads list. */
+    tid_t tid;                 /* Thread identifier. */
+    enum thread_status status; /* Thread state. */
+    char name[16];             /* Name (for debugging purposes). */
+    uint8_t *stack;            /* Saved stack pointer. */
+    int priority;              /* Priority. */
+    struct list_elem allelem;  /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
-    struct list_elem elem;              /* List element. */
-    /* for project 1 */
-    int64_t alarm_time;
-    /*for priority donation*/
-    struct list_elem semaelem;
-    struct list_elem condelem;
-    int original_priority;
-    struct list donor_thread_list;
-    struct list_elem donorelem;
-    struct lock* waiting_lock;
-    int nice;
-    int recent_cpu;
+    struct list_elem elem; /* List element. */
+
+    /* Owned by devices/timer.c. */
+    int64_t wake_ticks; /* Ticks to wake up. */
+
+    /* Shared between thread.c and synch.c. */
+    int original_priority;   /* Original priority before donation. */
+    struct list donators;    /* List of donators. */
+    struct list_elem doelem; /* List element for donators list. */
+    struct thread *donee;    /* Thread that is given priority. */
+
+    /* Owned by thread.c. */
+    int nice;       /* Figure that indicates how nice to others. */
+    int recent_cpu; /* Weighted average amount of received CPU time. */
 
 #ifdef USERPROG
-    /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
-    struct list_elem child_elem;        /* parent의 child_list 변수에 들어가는 원소. */
-    struct list child_list;             /* child thread들을 관리하는 list. thread의 child_elem을 원소로 가짐. */
-    int exit_code;                      /* child thread의 exit code를 저장하여 parent thread에서 값을 읽기 위한 변수. */
-    struct semaphore child_sema;        /* child process의 exit을 기다려주기 위해서 semaphore를 이용. */
-    /* child process가 종료되고 나서 parent process에서 child thread의 값을 읽어올 때 동기화를 위해 이용.
-     * parent process가 값을 다 읽고난 이후에 sema_up을 호출하여 child process 종료*/
-    struct semaphore parent_sema;
-    struct semaphore load_sema; //check load success, load가 완료되면 증가, 부모가 load가 완료되는 것을 기다리면 감소
-    bool load_complete; // true: load good, false: load bad
-    struct file* fd[128]; // 파일 디스크립터 이다.
+    /* Shared between userprog/process.c and userprog/syscall.c. */
+    uint32_t *pagedir;         /* Page directory. */
+    struct process *pcb;       /* Process control block. */
+    struct list children;      /* List of children processes. */
+    struct list fdt;           /* List of file descriptor entries. */
+    int next_fd;               /* File descriptor for next file. */
+    struct file *running_file; /* Currently running file. */
 #endif
 
     /* Owned by thread.c. */
-    unsigned magic;                     /* Detects stack overflow. */
-  };
+    unsigned magic; /* Detects stack overflow. */
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
-
 extern bool thread_mlfqs;
 
-void thread_init (void);
-void thread_start (void);
+void thread_init(void);
+void thread_start(void);
 
-void thread_tick (void);
-void thread_print_stats (void);
+void thread_tick(void);
+void thread_print_stats(void);
 
-typedef void thread_func (void *aux);
-tid_t thread_create (const char *name, int priority, thread_func *, void *);
+typedef void thread_func(void *aux);
+tid_t thread_create(const char *name, int priority, thread_func *, void *);
 
-void thread_block (void);
-void thread_unblock (struct thread *);
+void thread_block(void);
+void thread_unblock(struct thread *);
 
-struct thread *thread_current (void);
-tid_t thread_tid (void);
-const char *thread_name (void);
+struct thread *thread_current(void);
+tid_t thread_tid(void);
+const char *thread_name(void);
 
-void thread_exit (void) NO_RETURN; 
-void thread_yield (void);
+void thread_exit(void) NO_RETURN;
+void thread_yield(void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
-typedef void thread_action_func (struct thread *t, void *aux);
-void thread_foreach (thread_action_func *, void *);
+typedef void thread_action_func(struct thread *t, void *aux);
+void thread_foreach(thread_action_func *, void *);
 
-int thread_get_priority (void);
-void thread_set_priority (int);
+int thread_get_priority(void);
+void thread_set_priority(int);
 
-int thread_get_nice (void);
-void thread_set_nice (int);
-int thread_get_recent_cpu (void);
-int thread_get_load_avg (void);
+int thread_get_nice(void);
+void thread_set_nice(int);
+int thread_get_recent_cpu(void);
+int thread_get_load_avg(void);
 
-bool priority_greater_func(struct list_elem *a, struct list_elem *b, void *aux);
-bool sema_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUSED); 
-bool cond_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
-bool donor_greater_func(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
-void donate_priority(struct thread* donor, struct thread* donee);
-void set_mlfqs_recent_cpu(struct thread *t);
-void set_mlfqs_priority(struct thread *t);
-struct thread *thread_get_child (tid_t tid);
+struct list *get_sleep_list(void);
+struct list *thread_get_donators(void);
+struct thread *thread_get_donee(void);
+void thread_set_donee(struct thread *);
+
+#ifdef USERPROG
+uint32_t *thread_get_pagedir(void);
+void thread_set_pagedir(uint32_t *);
+struct process *thread_get_pcb(void);
+void thread_set_pcb(struct process *);
+struct list *thread_get_children(void);
+struct list *thread_get_fdt(void);
+int thread_get_next_fd(void);
+struct file *thread_get_running_file(void);
+void thread_set_running_file(struct file *);
+#endif
+
+list_less_func less_priority;
 
 #endif /* threads/thread.h */
