@@ -18,6 +18,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/page.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -179,6 +180,9 @@ void process_exit(void)
     lock_acquire(filesys_lock);
     file_close(thread_get_running_file());
     lock_release(filesys_lock);
+
+    // VM을 제거한다.
+    vm_destroy (&cur->VM);
 
     /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
