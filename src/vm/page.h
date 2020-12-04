@@ -7,6 +7,9 @@
 #include <hash.h>
 #include "threads/palloc.h"
 
+// vm의 type을 3가지로 나눈다. (binary, 매핑된 파일, 스왑으로 가져옴)
+enum vm_type{VM_BIN, VM_FILE, VM_ANON};
+
 struct vm_entry{
     uint8_t type; // VM의 type을 저장한다. (binary, 매핑된 파일, 스왑으로 가져옴)
     void *vaddr; // virtual address

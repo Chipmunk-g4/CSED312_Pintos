@@ -528,29 +528,29 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
         size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
         size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-        /* Get a page of memory. */
-        uint8_t *kpage = palloc_get_page(PAL_USER);
-        if (kpage == NULL)
-            return false;
+        // vm_entry 생성
+        struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+        if (vme == NULL) return false; // 할당 실패
 
-        /* Load this page. */
-        if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
-        {
-            palloc_free_page(kpage);
-            return false;
-        }
-        memset(kpage + page_read_bytes, 0, page_zero_bytes);
+        // vm_entry 필드 초기화
+        vme->type = VM_BIN;
+        vme->vaddr = upage;
+        vme->writable = writable;
+        vme->is_loaded  = false;
 
-        /* Add the page to the process's address space. */
-        if (!install_page(upage, kpage, writable))
-        {
-            palloc_free_page(kpage);
-            return false;
-        }
+        vme->file = file;
+
+        vme->offset = ofs;
+        vme->read_bytes = page_read_bytes;
+        vme->zero_bytes = page_zero_bytes;
+
+        // vm_entry를 해시에 추가
+        insert_vme(&thread_current()->VM, vme);
 
         /* Advance. */
         read_bytes -= page_read_bytes;
         zero_bytes -= page_zero_bytes;
+        ofs += page_read_bytes;
         upage += PGSIZE;
     }
     return true;
@@ -563,6 +563,7 @@ setup_stack(void **esp)
 {
     uint8_t *kpage;
     bool success = false;
+    void* v_addr = ((uint8_t *) PHYS_BASE) - PGSIZE; // 가상 주소를 만든다.
 
     kpage = palloc_get_page(PAL_USER | PAL_ZERO);
     if (kpage != NULL)
@@ -573,6 +574,20 @@ setup_stack(void **esp)
         else
             palloc_free_page(kpage);
     }
+
+    // vm_entry 생성
+    struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+    if (vme == NULL) return false; // 할당 실패
+
+    // vm_entry 필드 초기화
+    vme->type = VM_ANON;
+    vme->vaddr = pg_round_down(v_addr);
+    vme->writable = true;
+    vme->is_loaded = true;
+
+    // vm_entry를 해시에 추가
+    insert_vme(&thread_current()->VM, vme);
+
     return success;
 }
 
