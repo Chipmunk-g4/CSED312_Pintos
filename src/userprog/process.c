@@ -658,20 +658,6 @@ static void push_arguments(int argc, char **argv, void **esp)
     *esp -= sizeof(uintptr_t);
 }
 
-/*
-    void* v_addr = ((uint8_t *) PHYS_BASE) - PGSIZE; // 가상 주소를 만든다.
-
-    if (kpage != NULL)
-    {
-        success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
-        if (success)
-            *esp = PHYS_BASE;
-        else
-            palloc_free_page(kpage);
-    }
-
-*/
-
 //addr를 포함하도록 stack을 확장한다.
 //stack 확장에 성공하면 true를 return 한다.
 bool expand_stack(void* addr) {
