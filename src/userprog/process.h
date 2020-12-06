@@ -41,4 +41,6 @@ struct process *process_get_child(pid_t);
 void process_remove_child(struct process *);
 struct file_descriptor_entry *process_get_fde(int);
 
+bool expand_stack(void* addr);
+
 #endif /* userprog/process.h */
