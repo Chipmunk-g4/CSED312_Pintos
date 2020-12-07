@@ -691,3 +691,37 @@ bool expand_stack(void* addr) {
 
   return true;
 }
+
+// 페이지 할당 -> 데이터 로드 -> 페이지 테이블 설정 역할을 하는 함수이다.
+bool handle_mm_fault (struct vm_entry * vme){
+    // 1. 사용할 물리 메모리 할당하기
+    uint8_t *kaddr = palloc_get_page(PAL_USER);
+
+    // 2. load_file을 사용해서 데이터 로드하기
+    // 3. page table 세팅하기
+    // VM_BIN, VM_FILE, VM_ANON에 따라 다르게 처리해야 하므로 switch case문 사용
+    switch(vme->type){
+        case VM_BIN:
+            if(!load_file(kaddr,vme) || !install_page(vme->vaddr, kaddr, vme->writable)){
+                // 만약 실패한 경우 kaddr할당을 해제하고 false반환
+                palloc_free_page(kaddr);
+                return false;
+            }
+            break;
+        case VM_FILE:
+            if(!load_file(kaddr,vme) || !install_page(vme->vaddr, kaddr, vme->writable)){
+                // 만약 실패한 경우 kaddr할당을 해제하고 false반환
+                palloc_free_page(kaddr);
+                return false;
+            }
+            break;
+        case VM_ANON:
+            break;
+        default:
+            return false;
+    }
+
+    // 성공 반환
+    vme->is_loaded = true;
+	return true;
+}

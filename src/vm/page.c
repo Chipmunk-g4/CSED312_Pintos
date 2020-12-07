@@ -2,6 +2,7 @@
 #include "threads/vaddr.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "filesys/file.h"
 #include <string.h>
 
 static unsigned vm_hash_func (const struct hash_elem *e, void *aux UNUSED); //해시 elem e의 vaddr에 대한 해시값 반환
@@ -69,4 +70,18 @@ static void hash_destroy_sub (struct hash_elem *e, void *aux UNUSED){ // vm_dest
     // 즉, e에 해당되는 vm_entry를 가져와 이를 할당 해제하면 된다.
     struct vm_entry *vme = hash_entry (e, struct vm_entry, elem);
     free (vme);
+}
+
+// 디스크에 존재하는 페이지를 물리 메모리로 로드하는 함수
+bool load_file(void *kaddr, struct vm_entry *vme){
+    // 성공하면 true, 실패하면 false를 반환한다.
+    // file의 데이터를 offset부터 시작해서 read_bytes만큼 불러왔을 때 read_bytes만큼 제대로 불려와진 경우 => 성공
+    if(file_read_at (vme->file, kaddr, vme->read_bytes, vme->offset) == (int) vme->read_bytes){
+        // 물리메모리를 세팅하고, true를 반환한다.
+        memset(kaddr + vme->read_bytes, 0, vme->zero_bytes);        
+        return true;
+    }
+    else{
+        return false;
+    }
 }
