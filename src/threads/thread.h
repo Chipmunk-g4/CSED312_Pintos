@@ -108,7 +108,7 @@ struct thread
     int recent_cpu; /* Weighted average amount of received CPU time. */
 
     // 가상 메모리를 저장할 해시 테이블
-    struct hash VM;
+    struct hash vm;
 
 #ifdef USERPROG
     /* Shared between userprog/process.c and userprog/syscall.c. */

@@ -4,6 +4,7 @@
 #include "lib/user/syscall.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "vm/page.h"
 
 #define MAX_ARGS 128
 
@@ -42,5 +43,7 @@ void process_remove_child(struct process *);
 struct file_descriptor_entry *process_get_fde(int);
 
 bool expand_stack(void* addr);
+
+bool handle_mm_fault (struct vm_entry *vme); // 페이지 할당 -> 데이터 로드 -> 페이지 테이블 설정 역할을 하는 함수이다.
 
 #endif /* userprog/process.h */

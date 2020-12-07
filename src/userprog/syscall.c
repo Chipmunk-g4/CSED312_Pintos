@@ -13,12 +13,16 @@
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
+#include "vm/page.h"
 
 struct lock filesys_lock;
 
 static void syscall_handler(struct intr_frame *);
 
-static void check_vaddr(const void *);
+static struct vm_entry * check_vaddr(const void *vaddr, void* esp);
+static void check_valid_buffer(const char *buffer, unsigned size, void *esp, bool write_enabled);
+static void check_valid_string(const char *str, void *esp);
+
 
 static void syscall_halt(void);
 static pid_t syscall_exec(const char *);
@@ -47,8 +51,9 @@ syscall_handler(struct intr_frame *f)
     void *esp = f->esp;
     int syscall_num;
 
-    check_vaddr(esp);
-    check_vaddr(esp + sizeof(uintptr_t) - 1);
+    // 주소 유효성 검사
+    check_vaddr(esp, f->esp);
+    check_vaddr(esp + sizeof(uintptr_t) - 1, f->esp);
     syscall_num = *(int *)esp;
 
     switch (syscall_num)
@@ -62,8 +67,6 @@ syscall_handler(struct intr_frame *f)
     {
         int status;
 
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 2 * sizeof(uintptr_t) - 1);
         status = *(int *)(esp + sizeof(uintptr_t));
 
         syscall_exit(status);
@@ -73,9 +76,10 @@ syscall_handler(struct intr_frame *f)
     {
         char *cmd_line;
 
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 2 * sizeof(uintptr_t) - 1);
         cmd_line = *(char **)(esp + sizeof(uintptr_t));
+
+        // 입력되는 문자열이 유효한지 검사한다.
+        check_valid_string((const char *)cmd_line, f->esp);
 
         f->eax = (uint32_t)syscall_exec(cmd_line);
         break;
@@ -84,8 +88,6 @@ syscall_handler(struct intr_frame *f)
     {
         pid_t pid;
 
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 2 * sizeof(uintptr_t) - 1);
         pid = *(pid_t *)(esp + sizeof(uintptr_t));
 
         f->eax = (uint32_t)syscall_wait(pid);
@@ -96,10 +98,11 @@ syscall_handler(struct intr_frame *f)
         char *file;
         unsigned initial_size;
 
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 3 * sizeof(uintptr_t) - 1);
         file = *(char **)(esp + sizeof(uintptr_t));
         initial_size = *(unsigned *)(esp + 2 * sizeof(uintptr_t));
+
+        // 입력되는 문자열이 유효한지 검사한다.
+        check_valid_string((const char *)file, f->esp);
 
         f->eax = (uint32_t)syscall_create(file, initial_size);
         break;
@@ -108,9 +111,10 @@ syscall_handler(struct intr_frame *f)
     {
         char *file;
 
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 2 * sizeof(uintptr_t) - 1);
         file = *(char **)(esp + sizeof(uintptr_t));
+
+        // 입력되는 문자열이 유효한지 검사한다.
+        check_valid_string((const char *)file, f->esp);
 
         f->eax = (uint32_t)syscall_remove(file);
         break;
@@ -119,9 +123,10 @@ syscall_handler(struct intr_frame *f)
     {
         char *file;
 
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 2 * sizeof(uintptr_t) - 1);
         file = *(char **)(esp + sizeof(uintptr_t));
+
+        // 입력되는 문자열이 유효한지 검사한다.
+        check_valid_string((const char *)file, f->esp);
 
         f->eax = (uint32_t)syscall_open(file);
         break;
@@ -130,8 +135,6 @@ syscall_handler(struct intr_frame *f)
     {
         int fd;
 
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 2 * sizeof(uintptr_t) - 1);
         fd = *(int *)(esp + sizeof(uintptr_t));
 
         f->eax = (uint32_t)syscall_filesize(fd);
@@ -143,11 +146,12 @@ syscall_handler(struct intr_frame *f)
         void *buffer;
         unsigned size;
 
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 4 * sizeof(uintptr_t) - 1);
         fd = *(int *)(esp + sizeof(uintptr_t));
         buffer = *(void **)(esp + 2 * sizeof(uintptr_t));
         size = *(unsigned *)(esp + 3 * sizeof(uintptr_t));
+
+        // 입력되는 버퍼가 유효한지 검사한다.
+        check_valid_buffer((const char *)buffer, (unsigned)size, f->esp, false);
 
         f->eax = (uint32_t)syscall_read(fd, buffer, size);
         break;
@@ -158,11 +162,12 @@ syscall_handler(struct intr_frame *f)
         void *buffer;
         unsigned size;
 
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 4 * sizeof(uintptr_t) - 1);
         fd = *(int *)(esp + sizeof(uintptr_t));
         buffer = *(void **)(esp + 2 * sizeof(uintptr_t));
         size = *(unsigned *)(esp + 3 * sizeof(uintptr_t));
+
+        // 입력되는 버퍼가 유효한지 검사한다.
+        check_valid_buffer((const char *)buffer, (unsigned)size, f->esp, true);
 
         f->eax = (uint32_t)syscall_write(fd, buffer, size);
         break;
@@ -171,9 +176,6 @@ syscall_handler(struct intr_frame *f)
     {
         int fd;
         unsigned position;
-
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 3 * sizeof(uintptr_t) - 1);
         fd = *(int *)(esp + sizeof(uintptr_t));
         position = *(unsigned *)(esp + 2 * sizeof(uintptr_t));
 
@@ -183,9 +185,6 @@ syscall_handler(struct intr_frame *f)
     case SYS_TELL:
     {
         int fd;
-
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 2 * sizeof(uintptr_t) - 1);
         fd = *(int *)(esp + sizeof(uintptr_t));
 
         f->eax = (uint32_t)syscall_tell(fd);
@@ -194,9 +193,6 @@ syscall_handler(struct intr_frame *f)
     case SYS_CLOSE:
     {
         int fd;
-
-        check_vaddr(esp + sizeof(uintptr_t));
-        check_vaddr(esp + 2 * sizeof(uintptr_t) - 1);
         fd = *(int *)(esp + sizeof(uintptr_t));
 
         syscall_close(fd);
@@ -209,12 +205,46 @@ syscall_handler(struct intr_frame *f)
 
 /* Checks user-provided virtual address. If it is
    invalid, terminates the current process. */
-static void
-check_vaddr(const void *vaddr)
+static struct vm_entry * check_vaddr(const void *vaddr, void* esp)
 {
-    if (!vaddr || !is_user_vaddr(vaddr) ||
-        !pagedir_get_page(thread_get_pagedir(), vaddr))
+    // 주소가 user address에 속하는 경우
+    if(vaddr >= (void*)0x08048000 && vaddr < (void*)0xc0000000){
+        // vaddr가 속한 vm_entry를 가져와서 없다면 (NULL) exit(-1)
+        struct vm_entry *vme = find_vme(vaddr);
+        if(vme == NULL) syscall_exit(-1);
+
+        return vme;
+    }
+    // 주소가 user address에 속하지 않는 경우에는 exit
+    else{
         syscall_exit(-1);
+    }
+
+    return NULL;
+}
+
+// read, write syscall에서 버퍼의 주소를 검사하기 위해 사용한다.
+static void check_valid_buffer(const char *buffer, unsigned size, void *esp, bool write_enabled){
+
+    struct vm_entry *vme;
+
+    // 버퍼를 확인한다.
+    while(size--){
+        // 유효한 주소인지 확인
+        vme = check_vaddr((void *)(buffer++), esp);
+        // writable이 잘 맞는지 확인 (물론 이때 vme는 NULL이 아니다)
+        if(write_enabled && !vme->writable) syscall_exit(-1);
+    }
+}
+
+// exec, create, remove, open syscall에서 문자열의 주소값이 유효한지 판단하는 함수이다.
+static void check_valid_string(const char *str, void *esp){
+    // str 끝까지 탐색해서 유효한 주소인지 확인
+    check_vaddr((void *)(str), esp);
+    while(*str != 0){
+        str++;
+        check_vaddr(str,esp);
+    }
 }
 
 struct lock *syscall_get_filesys_lock(void)
@@ -245,10 +275,6 @@ static pid_t syscall_exec(const char *cmd_line)
     struct process *child;
     int i;
 
-    check_vaddr(cmd_line);
-    for (i = 0; *(cmd_line + i); i++)
-        check_vaddr(cmd_line + i + 1);
-
     pid = process_execute(cmd_line);
     child = process_get_child(pid);
 
@@ -270,10 +296,6 @@ static bool syscall_create(const char *file, unsigned initial_size)
     bool success;
     int i;
 
-    check_vaddr(file);
-    for (i = 0; *(file + i); i++)
-        check_vaddr(file + i + 1);
-
     lock_acquire(&filesys_lock);
     success = filesys_create(file, (off_t)initial_size);
     lock_release(&filesys_lock);
@@ -286,10 +308,6 @@ static bool syscall_remove(const char *file)
 {
     bool success;
     int i;
-
-    check_vaddr(file);
-    for (i = 0; *(file + i); i++)
-        check_vaddr(file + i + 1);
 
     lock_acquire(&filesys_lock);
     success = filesys_remove(file);
@@ -304,10 +322,6 @@ static int syscall_open(const char *file)
     struct file_descriptor_entry *fde;
     struct file *new_file;
     int i;
-
-    check_vaddr(file);
-    for (i = 0; *(file + i); i++)
-        check_vaddr(file + i + 1);
 
     fde = palloc_get_page(0);
     if (!fde)
@@ -355,9 +369,6 @@ static int syscall_read(int fd, void *buffer, unsigned size)
     struct file_descriptor_entry *fde;
     int bytes_read, i;
 
-    for (i = 0; i < size; i++)
-        check_vaddr(buffer + i);
-
     if (fd == 0)
     {
         unsigned i;
@@ -384,9 +395,6 @@ static int syscall_write(int fd, const void *buffer, unsigned size)
 {
     struct file_descriptor_entry *fde;
     int bytes_written, i;
-
-    for (i = 0; i < size; i++)
-        check_vaddr(buffer + i);
 
     if (fd == 1)
     {
