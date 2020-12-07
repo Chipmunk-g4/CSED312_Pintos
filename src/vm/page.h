@@ -37,4 +37,6 @@ struct vm_entry *find_vme (void *vaddr); // 현재 스레드의 해시(VM)에 va
 
 void vm_destroy (struct hash * vm); // vm 파괴
 
+bool load_file(void *kaddr, struct vm_entry *vme); // 디스크에 존재하는 페이지를 물리 메모리로 로드하는 함수
+
 #endif
