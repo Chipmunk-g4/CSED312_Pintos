@@ -19,7 +19,10 @@ struct lock filesys_lock;
 
 static void syscall_handler(struct intr_frame *);
 
-static void check_vaddr(const void *);
+static struct vm_entry * check_vaddr(const void *vaddr, void* esp);
+static void check_valid_buffer(const char *buffer, unsigned size, void *esp, bool write_enabled);
+static void check_valid_string(const char *str, void *esp);
+
 
 static void syscall_halt(void);
 static pid_t syscall_exec(const char *);
@@ -272,10 +275,6 @@ static pid_t syscall_exec(const char *cmd_line)
     struct process *child;
     int i;
 
-    check_vaddr(cmd_line);
-    for (i = 0; *(cmd_line + i); i++)
-        check_vaddr(cmd_line + i + 1);
-
     pid = process_execute(cmd_line);
     child = process_get_child(pid);
 
@@ -297,10 +296,6 @@ static bool syscall_create(const char *file, unsigned initial_size)
     bool success;
     int i;
 
-    check_vaddr(file);
-    for (i = 0; *(file + i); i++)
-        check_vaddr(file + i + 1);
-
     lock_acquire(&filesys_lock);
     success = filesys_create(file, (off_t)initial_size);
     lock_release(&filesys_lock);
@@ -313,10 +308,6 @@ static bool syscall_remove(const char *file)
 {
     bool success;
     int i;
-
-    check_vaddr(file);
-    for (i = 0; *(file + i); i++)
-        check_vaddr(file + i + 1);
 
     lock_acquire(&filesys_lock);
     success = filesys_remove(file);
@@ -331,10 +322,6 @@ static int syscall_open(const char *file)
     struct file_descriptor_entry *fde;
     struct file *new_file;
     int i;
-
-    check_vaddr(file);
-    for (i = 0; *(file + i); i++)
-        check_vaddr(file + i + 1);
 
     fde = palloc_get_page(0);
     if (!fde)
@@ -382,9 +369,6 @@ static int syscall_read(int fd, void *buffer, unsigned size)
     struct file_descriptor_entry *fde;
     int bytes_read, i;
 
-    for (i = 0; i < size; i++)
-        check_vaddr(buffer + i);
-
     if (fd == 0)
     {
         unsigned i;
@@ -411,9 +395,6 @@ static int syscall_write(int fd, const void *buffer, unsigned size)
 {
     struct file_descriptor_entry *fde;
     int bytes_written, i;
-
-    for (i = 0; i < size; i++)
-        check_vaddr(buffer + i);
 
     if (fd == 1)
     {
