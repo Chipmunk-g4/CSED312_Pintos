@@ -182,7 +182,7 @@ void process_exit(void)
     lock_release(filesys_lock);
 
     // VM을 제거한다.
-    vm_destroy (&cur->VM);
+    vm_destroy (&cur->vm);
 
     /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -545,7 +545,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
         vme->zero_bytes = page_zero_bytes;
 
         // vm_entry를 해시에 추가
-        insert_vme(&thread_current()->VM, vme);
+        insert_vme(&thread_current()->vm, vme);
 
         /* Advance. */
         read_bytes -= page_read_bytes;
@@ -586,7 +586,7 @@ setup_stack(void **esp)
     vme->is_loaded = true;
 
     // vm_entry를 해시에 추가
-    insert_vme(&thread_current()->VM, vme);
+    insert_vme(&thread_current()->vm, vme);
 
     return success;
 }
@@ -686,7 +686,7 @@ bool expand_stack(void* addr) {
       return false;
     }
 
-    insert_vme(&thread_current()->VM, vme);
+    insert_vme(&thread_current()->vm, vme);
   }
 
   return true;

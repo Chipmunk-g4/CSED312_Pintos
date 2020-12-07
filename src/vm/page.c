@@ -39,7 +39,7 @@ struct vm_entry *find_vme (void *vaddr){ // 현재 스레드의 해시(VM)에 va
     vme.vaddr = pg_round_down (vaddr);
 
     // 더미 vm_entry인 vme를 통해 현재 스레드에 vaddr를 가지는 vm_entry가 있는지 확인
-    struct hash_elem *elem = hash_find (&thread_current ()->VM, &vme.elem);
+    struct hash_elem *elem = hash_find (&thread_current ()->vm, &vme.elem);
 
     // 만약 elem가 존재한다면, hash_entry로 찾아서 반환, 없다면 NULL반환
     return elem ? hash_entry (elem, struct vm_entry, elem) : NULL;
