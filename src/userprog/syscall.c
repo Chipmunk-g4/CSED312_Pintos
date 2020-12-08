@@ -23,7 +23,7 @@ static struct vm_entry * check_vaddr(const void *vaddr, void* esp);
 static void check_valid_buffer(const char *buffer, unsigned size, void *esp, bool write_enabled);
 static void check_valid_string(const char *str, void *esp);
 
-static void get_arguments (int32_t *esp, int32_t *args, int count);
+static void get_argument(int *esp, int *arg, int count);
 
 static void syscall_halt(void);
 static pid_t syscall_exec(const char *);
@@ -119,7 +119,7 @@ syscall_handler(struct intr_frame *f)
 }
 
 // 유저스택에 있는 데이터를 esp에서 4byte크기로 count개수 만큼 가져온다.
-static void get_arguments (int32_t *esp, int32_t *args, int count){
+static void get_argument(int *esp, int *arg, int count){
 
     void *back_up = (void *)esp;
 
@@ -132,7 +132,7 @@ static void get_arguments (int32_t *esp, int32_t *args, int count){
         check_vaddr((const void *)(esp+3), back_up);
 
         // get value
-        *(args++) = *esp;
+        *(arg++) = *esp;
     }
 }
 
