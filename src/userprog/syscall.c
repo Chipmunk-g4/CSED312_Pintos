@@ -422,7 +422,7 @@ int mmap(int fd, void *addr) {
   if(fd == 0 || fd == 1) return -1;
 //  if address is NULL
   if(addr == NULL || addr == 0) return -1;
-//  if address is not align in PGSIZE
+//  if address is not align in PGSIZE ( equivalent with addr % PGSIZE == 0)
   if(pg_ofs(addr) != 0) return -1;
 
 //  lock filesys
@@ -441,8 +441,6 @@ int mmap(int fd, void *addr) {
     return -1;
   }
 
-  /*TODO: map memory page*/
-
   int id = 1;
   struct list * curr_fm_list = &(thread_current()->file_mem_list);
   if(!list_empty(curr_fm_list)) {
@@ -453,8 +451,33 @@ int mmap(int fd, void *addr) {
   fm_elem->id = id;
   fm_elem->file = f;
   list_init(&(fm_elem->vme_list));
-  list_push_back(curr_fm_list, &(fm_elem->elem));
 
+  size_t file_size = file_length(f);
+  for(int size = file_size; size > 0; size -= PGSIZE) {
+    //  check address doesn't contained in exist vme
+    //  if vme found
+    if(find_vme(addr + file_size - size) != NULL) {
+      lock_release(&filesys_lock);
+      return -1;
+    }
+
+    struct vm_entry * vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+
+    vme->type = VM_FILE;
+    vme->vaddr = addr + file_size - size;
+    vme->writable = true;
+
+    vme->is_loaded = false;
+    vme->file = f;
+
+    vme->offset = file_size - size;
+    vme->read_bytes = size >= PGSIZE ? PGSIZE : size;
+    vme->zero_bytes = PGSIZE - vme->read_bytes;
+
+    list_push_back(&(fm_elem->vme_list), &(vme->mmap_elem));
+  }
+
+  list_push_back(curr_fm_list, &(fm_elem->elem));
   lock_release(&filesys_lock);
   return id;
 }
