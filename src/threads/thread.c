@@ -639,6 +639,7 @@ init_thread(struct thread *t, const char *name, int priority)
     t->stack = (uint8_t *)t + PGSIZE;
     t->priority = t->original_priority = priority;
     list_init(&t->donators);
+    list_init(&t->file_mem_list);
     t->donee = NULL;
     if (thread_mlfqs)
     {

@@ -14,6 +14,7 @@
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
 #include "vm/page.h"
+#include "threads/malloc.h"
 
 struct lock filesys_lock;
 
@@ -252,7 +253,6 @@ static int syscall_wait(pid_t pid)
 static bool syscall_create(const char *file, unsigned initial_size)
 {
     bool success;
-    int i;
 
     lock_acquire(&filesys_lock);
     success = filesys_create(file, (off_t)initial_size);
@@ -265,7 +265,6 @@ static bool syscall_create(const char *file, unsigned initial_size)
 static bool syscall_remove(const char *file)
 {
     bool success;
-    int i;
 
     lock_acquire(&filesys_lock);
     success = filesys_remove(file);
@@ -279,7 +278,6 @@ static int syscall_open(const char *file)
 {
     struct file_descriptor_entry *fde;
     struct file *new_file;
-    int i;
 
     fde = palloc_get_page(0);
     if (!fde)
@@ -418,11 +416,14 @@ void syscall_close(int fd)
 
 /*fd와 address를 서로 mapping 해주고, 맵핑 id를 리턴해준다.*/
 int mmap(int fd, void *addr) {
+
 //  can't use standard in/out as mapping
   if(fd == 0 || fd == 1) return -1;
+
 //  if address is NULL
   if(addr == NULL || addr == 0) return -1;
-//  if address is not align in PGSIZE ( equivalent with addr % PGSIZE == 0)
+
+//  if address is not align in PGSIZE
   if(pg_ofs(addr) != 0) return -1;
 
 //  lock filesys
@@ -461,10 +462,12 @@ int mmap(int fd, void *addr) {
   for(int size = file_size; size > 0; size -= PGSIZE) {
     //  check address doesn't contained in exist vme
     //  if vme found
+
     if(find_vme(addr + file_size - size) != NULL) {
       lock_release(&filesys_lock);
       return -1;
     }
+
 //  vme 생성
     struct vm_entry * vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
 //  vme field 채우기
@@ -486,6 +489,7 @@ int mmap(int fd, void *addr) {
   list_push_back(curr_fm_list, &(fm_elem->elem));
 // 정상 종료시 lock 해제
   lock_release(&filesys_lock);
+
   return id;
 }
 
