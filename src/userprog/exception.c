@@ -136,15 +136,14 @@ page_fault(struct intr_frame *f)
   bool in_max_growth; /* True: esp - 32byte <= addr, False: else*/
           //stack이 한번에 최대한 성장할 수 있는 범위 안에 있는 주소인가?
 
-          /* Obtain faulting address, the virtual address that was
-           accessed to cause the fault.  It may point to code or to
-           data.  It is not necessarily the address of the instruction
-           that caused the fault (that's f->eip).
-           See [IA32-v2a] "MOV--Move to/from Control Registers" and
-           [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
-           (#PF)". */
-          asm("movl %%cr2, %0"
-          : "=r"(fault_addr));
+  /* Obtain faulting address, the virtual address that was
+    accessed to cause the fault.  It may point to code or to
+    data.  It is not necessarily the address of the instruction
+    that caused the fault (that's f->eip).
+    See [IA32-v2a] "MOV--Move to/from Control Registers" and
+    [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
+    (#PF)". */
+  asm("movl %%cr2, %0" : "=r"(fault_addr));
 
   /* Turn interrupts back on (they were only off so that we could
    be assured of reading CR2 before it changed). */
@@ -164,9 +163,9 @@ page_fault(struct intr_frame *f)
   // fault_addr에 해당하는 vm_entry 가져오기
   struct vm_entry * vme = find_vme(fault_addr);
 
-  // vme가 없을때
-  if(!vme){
-    // vme에 해당하는 데이터가 물리 메모리에 잘 올라오지 못한 경우 에러 출력
+  // vme가 존재하는 경우
+  if(vme != NULL){
+    // vme에 해당하는 데이터가 물리 메모리에 올라오지 못한 경우 에러 출력
     if(!handle_mm_fault(vme)){
         printf("Page fault at %p: %s error %s page in %s context.\n",
                fault_addr,
