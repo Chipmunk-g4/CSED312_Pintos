@@ -23,7 +23,6 @@ static struct vm_entry * check_vaddr(const void *vaddr, void* esp);
 static void check_valid_buffer(const char *buffer, unsigned size, void *esp, bool write_enabled);
 static void check_valid_string(const char *str, void *esp);
 
-static void get_argument(int *esp, int *arg, int count);
 
 static void syscall_halt(void);
 static pid_t syscall_exec(const char *);
@@ -53,68 +52,155 @@ static void
 syscall_handler(struct intr_frame *f)
 {
     void *esp = f->esp;
-    int arg[4]; // argument를 저장하는 공간이다.
+    int syscall_num;
 
+    // 주소 유효성 검사
     check_vaddr(esp, f->esp);
+    check_vaddr(esp + sizeof(uintptr_t) - 1, f->esp);
+    syscall_num = *(int *)esp;
 
-    switch (*(int *)(f->esp)) { // f->esp에는 syscall number가 담겨있다.
+    switch (syscall_num)
+    {
     case SYS_HALT:
-      syscall_halt();
-      break;
+    {
+        syscall_halt();
+        NOT_REACHED();
+    }
     case SYS_EXIT:
-      get_argument(f->esp, arg, 1); // 인자: 1개
-      syscall_exit(arg[0]);
-      break;
+    {
+        int status;
+
+        status = *(int *)(esp + sizeof(uintptr_t));
+
+        syscall_exit(status);
+        NOT_REACHED();
+    }
     case SYS_EXEC:
-      get_argument(f->esp, arg, 1); // 인자: 1개
-      check_valid_string((const void *)arg[0], f->esp);
-      f -> eax = syscall_exec(arg[0]); // 계산 후 결과를 eax에 저장
-      break;
+    {
+        char *cmd_line;
+
+        cmd_line = *(char **)(esp + sizeof(uintptr_t));
+
+        // 입력되는 문자열이 유효한지 검사한다.
+        check_valid_string((const char *)cmd_line, f->esp);
+
+        f->eax = (uint32_t)syscall_exec(cmd_line);
+        break;
+    }
     case SYS_WAIT:
-      get_argument(f->esp, arg, 1); // 인자: 1개
-      f->eax = syscall_wait(arg[0]); // 계산 후 결과를 eax에 저장
-      break;
+    {
+        pid_t pid;
+
+        pid = *(pid_t *)(esp + sizeof(uintptr_t));
+
+        f->eax = (uint32_t)syscall_wait(pid);
+        break;
+    }
     case SYS_CREATE:
-      get_argument(f->esp, arg, 2); // 인자: 2개
-      check_valid_string((const void *)arg[0], f->esp);
-      f->eax = syscall_create((const char *) arg[0], arg[1]); // 계산 후 결과를 eax에 저장
-      break;
+    {
+        char *file;
+        unsigned initial_size;
+
+        file = *(char **)(esp + sizeof(uintptr_t));
+        initial_size = *(unsigned *)(esp + 2 * sizeof(uintptr_t));
+
+        // 입력되는 문자열이 유효한지 검사한다.
+        check_valid_string((const char *)file, f->esp);
+
+        f->eax = (uint32_t)syscall_create(file, initial_size);
+        break;
+    }
     case SYS_REMOVE:
-      get_argument(f->esp, arg, 1); // 인자: 1개
-      check_valid_string((const void *)arg[0], f->esp);
-      f->eax = syscall_remove((const char *) arg[0]); // 계산 후 결과를 eax에 저장
-      break;
+    {
+        char *file;
+
+        file = *(char **)(esp + sizeof(uintptr_t));
+
+        // 입력되는 문자열이 유효한지 검사한다.
+        check_valid_string((const char *)file, f->esp);
+
+        f->eax = (uint32_t)syscall_remove(file);
+        break;
+    }
     case SYS_OPEN:
-      get_argument(f->esp, arg, 1); // 인자: 1개
-      check_valid_string((const void *)arg[0], f->esp);
-      f->eax = syscall_open((const char *) arg[0]); // 계산 후 결과를 eax에 저장
-      break;
+    {
+        char *file;
+
+        file = *(char **)(esp + sizeof(uintptr_t));
+
+        // 입력되는 문자열이 유효한지 검사한다.
+        check_valid_string((const char *)file, f->esp);
+
+        f->eax = (uint32_t)syscall_open(file);
+        break;
+    }
     case SYS_FILESIZE:
-      get_argument(f->esp, arg, 1); // 인자: 1개
-      f->eax = syscall_filesize((int) arg[0]); // 계산 후 결과를 eax에 저장
-      break;
+    {
+        int fd;
+
+        fd = *(int *)(esp + sizeof(uintptr_t));
+
+        f->eax = (uint32_t)syscall_filesize(fd);
+        break;
+    }
     case SYS_READ:
-      get_argument(f->esp, arg, 3); // 인자: 3개
-      check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, true);
-      f->eax = syscall_read(arg[0],arg[1],arg[2]);
-      break;
+    {
+        int fd;
+        void *buffer;
+        unsigned size;
+
+        fd = *(int *)(esp + sizeof(uintptr_t));
+        buffer = *(void **)(esp + 2 * sizeof(uintptr_t));
+        size = *(unsigned *)(esp + 3 * sizeof(uintptr_t));
+
+        // 입력되는 버퍼가 유효한지 검사한다.
+        check_valid_buffer((const char *)buffer, (unsigned)size, f->esp, false);
+
+        f->eax = (uint32_t)syscall_read(fd, buffer, size);
+        break;
+    }
     case SYS_WRITE:
-      get_argument(f->esp, arg, 3); // 인자: 3개
-      check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, true);
-      f->eax = syscall_write(arg[0],arg[1],arg[2]);
-      break;
+    {
+        int fd;
+        void *buffer;
+        unsigned size;
+
+        fd = *(int *)(esp + sizeof(uintptr_t));
+        buffer = *(void **)(esp + 2 * sizeof(uintptr_t));
+        size = *(unsigned *)(esp + 3 * sizeof(uintptr_t));
+
+        // 입력되는 버퍼가 유효한지 검사한다.
+        check_valid_buffer((const char *)buffer, (unsigned)size, f->esp, true);
+
+        f->eax = (uint32_t)syscall_write(fd, buffer, size);
+        break;
+    }
     case SYS_SEEK:
-      get_argument(f->esp, arg, 2); // 인자: 2개
-      syscall_seek((int)arg[0], (unsigned)arg[1]);
-      break;
+    {
+        int fd;
+        unsigned position;
+        fd = *(int *)(esp + sizeof(uintptr_t));
+        position = *(unsigned *)(esp + 2 * sizeof(uintptr_t));
+
+        syscall_seek(fd, position);
+        break;
+    }
     case SYS_TELL:
-      get_argument(f->esp, arg, 1); // 인자: 1개
-      f->eax = syscall_tell((int) arg[0]); // 계산 후 결과를 eax에 저장
-      break;
+    {
+        int fd;
+        fd = *(int *)(esp + sizeof(uintptr_t));
+
+        f->eax = (uint32_t)syscall_tell(fd);
+        break;
+    }
     case SYS_CLOSE:
-      get_argument(f->esp, arg, 1); // 인자: 1개
-      syscall_close((int) arg[0]);
-      break;
+    {
+        int fd;
+        fd = *(int *)(esp + sizeof(uintptr_t));
+
+        syscall_close(fd);
+        break;
+    }
     case SYS_MMAP:
     {
       int fd;
@@ -138,26 +224,7 @@ syscall_handler(struct intr_frame *f)
       break;
     }
     default:
-      // 유효하지 않은 syscall
-      syscall_exit(-1);
-  }
-}
-
-// 유저스택에 있는 데이터를 esp에서 4byte크기로 count개수 만큼 가져온다.
-static void get_argument(int *esp, int *arg, int count){
-
-    void *back_up = (void *)esp;
-
-    // every count
-    while (count--)
-    {
-        esp++;
-        // check whether bound of esp is legal
-        check_vaddr((const void *)(esp), back_up);
-        check_vaddr((const void *)(esp+3), back_up);
-
-        // get value
-        *(arg++) = *esp;
+        syscall_exit(-1);
     }
 }
 

@@ -2,7 +2,6 @@
 #include "threads/vaddr.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
-#include "userprog/pagedir.h"
 #include "filesys/file.h"
 #include <string.h>
 
@@ -25,7 +24,7 @@ bool insert_vme (struct hash *vm, struct vm_entry *vme){ // vm에 vme 삽입
 
 bool delete_vme (struct hash *vm, struct vm_entry *vme){ // vm의 vme 제거
     // 해시에서 성공적으로 제거된 경우
-    if(hash_delete(vm,&vme->elem) != NULL){
+    if(hash_delete(vm,&vme->elem)){
         free(vme); // vme의 할당을 해제한다.
         return true;
     }
@@ -56,7 +55,7 @@ void vm_destroy (struct hash *vm){ // vm 파괴
 static unsigned vm_hash_func (const struct hash_elem *e, void *aux UNUSED){ //해시 elem e의 vaddr에 대한 해시값 반환
     // hash_entry 함수를 사용하여 원소 e의 vaddr를 가져온 후 이를 hash_int로 변환하여 해시값 반환
     void *addr = hash_entry(e,struct vm_entry, elem)->vaddr;
-    return hash_int((int)addr);
+    return hash_int(addr);
 }
 
 static bool vm_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED){ // 입력된 두 hash elem의 vaddr을 비교하여 a가 b보다 작은경우 true, 반대 false 반환
@@ -70,13 +69,6 @@ static void hash_destroy_sub (struct hash_elem *e, void *aux UNUSED){ // vm_dest
     // 이 함수는 hash_elem *e가 입력되었을 때 이를 삭제해야 한다.
     // 즉, e에 해당되는 vm_entry를 가져와 이를 할당 해제하면 된다.
     struct vm_entry *vme = hash_entry (e, struct vm_entry, elem);
-
-    // 만약 load되어있는 경우에는 물리메모리를 해제해준다.
-    if(vme->is_loaded){
-		palloc_free_page(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
-        pagedir_clear_page(thread_current()->pagedir, vme->vaddr);
-    }
-
     free (vme);
 }
 

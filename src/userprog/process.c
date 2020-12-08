@@ -95,9 +95,6 @@ start_process(void *pcb_)
     /* Set the current process's pcb to PCB. */
     thread_set_pcb(pcb);
 
-    // VM을 초기화 한다.
-    vm_init (&(thread_current()->vm));
-
     /* Initialize interrupt frame. */
     memset(&if_, 0, sizeof if_);
     if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -589,7 +586,7 @@ setup_stack(void **esp)
     vme->is_loaded = true;
 
     // vm_entry를 해시에 추가
-    success = insert_vme(&thread_current()->vm, vme);
+    insert_vme(&thread_current()->vm, vme);
 
     return success;
 }
