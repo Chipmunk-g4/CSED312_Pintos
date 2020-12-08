@@ -36,6 +36,9 @@ static int syscall_write(int, const void *, unsigned);
 static void syscall_seek(int, unsigned);
 static unsigned syscall_tell(int);
 
+int mmap(int fd, void *addr);
+void munmap(int map_id);
+
 /* Registers the system call interrupt handler. */
 void syscall_init(void)
 {
@@ -197,6 +200,28 @@ syscall_handler(struct intr_frame *f)
 
         syscall_close(fd);
         break;
+    }
+    case SYS_MMAP:
+    {
+      int fd;
+      void * addr;
+//      read argument from esp
+      fd = *(int *)(esp + sizeof(uintptr_t));
+      addr = (void *)(esp + 2 * sizeof(uintptr_t));
+
+//      call mmap function and save return value to eax register
+      f->eax = (uint32_t)mmap(fd, addr);
+      break;
+    }
+    case SYS_MUNMAP:
+    {
+      int mid;
+//      read argument from esp
+      mid = *(int *)(esp + sizeof(uintptr_t));
+
+//      call munmap function (no return)
+      munmap(mid);
+      break;
     }
     default:
         syscall_exit(-1);
@@ -456,4 +481,52 @@ void syscall_close(int fd)
     list_remove(&fde->fdtelem);
     palloc_free_page(fde);
     lock_release(&filesys_lock);
+}
+
+/**/
+int mmap(int fd, void *addr) {
+//  can't use standard in/out as mapping
+  if(fd == 0 || fd == 1) return -1;
+//  if address is NULL
+  if(addr == NULL || addr == 0) return -1;
+//  if address is not align in PGSIZE
+  if(pg_ofs(addr) != 0) return -1;
+
+//  lock filesys
+  lock_acquire(&filesys_lock);
+
+  struct file * f = NULL;
+  struct file_descriptor_entry * fde = process_get_fde(fd);
+  //cannot find file descriptor or file not found
+  if(fde != NULL && fde->file != NULL) {
+    //  reopen file to prevent file close terminates all opened file
+    f = file_reopen(fde->file);
+  }
+  if(f == NULL) {
+    //    release the filesys lock and return error
+    lock_release(&filesys_lock);
+    return -1;
+  }
+
+  /*TODO: map memory page*/
+
+  int id = 1;
+  struct list * curr_fm_list = &(thread_current()->file_mem_list);
+  if(!list_empty(curr_fm_list)) {
+    id = list_entry(list_back(curr_fm_list), struct file_mem, elem)->id + 1;
+  }
+
+  struct file_mem * fm_elem = (struct file_mem *)malloc(sizeof(struct file_mem));
+  fm_elem->id = id;
+  fm_elem->file = f;
+  list_init(&(fm_elem->vme_list));
+  list_push_back(curr_fm_list, &(fm_elem->elem));
+
+  lock_release(&filesys_lock);
+  return id;
+}
+
+/**/
+void munmap(int map_id) {
+
 }
