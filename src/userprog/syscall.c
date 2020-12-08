@@ -116,27 +116,13 @@ syscall_handler(struct intr_frame *f)
       syscall_close((int) arg[0]);
       break;
     case SYS_MMAP:
-    {
-      int fd;
-      void * addr;
-//      read argument from esp
-      fd = *(int *)(esp + sizeof(uintptr_t));
-      addr = (void *)(esp + 2 * sizeof(uintptr_t));
-
-//      call mmap function and save return value to eax register
-      f->eax = (uint32_t)mmap(fd, addr);
+      get_argument(f->esp, arg, 2);
+		  f->eax = mmap(arg[0],(void *)arg[1]);
       break;
-    }
     case SYS_MUNMAP:
-    {
-      int mid;
-//      read argument from esp
-      mid = *(int *)(esp + sizeof(uintptr_t));
-
-//      call munmap function (no return)
-      munmap(mid);
+      get_argument(f->esp, arg, 1);
+		  munmap(arg[0]);
       break;
-    }
     default:
       // 유효하지 않은 syscall
       syscall_exit(-1);
