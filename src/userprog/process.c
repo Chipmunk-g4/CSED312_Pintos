@@ -663,37 +663,37 @@ static void push_arguments(int argc, char **argv, void **esp)
 
 //addr를 포함하도록 stack을 확장한다.
 //stack 확장에 성공하면 true를 return 한다.
-// bool expand_stack(void* addr) {
-//   uint8_t * pg = palloc_get_page(PAL_USER | PAL_ZERO); /* 메모리 page를 할당한다.*/
+ bool expand_stack(void* addr) {
+   uint8_t * pg = palloc_get_page(PAL_USER | PAL_ZERO); /* 메모리 page를 할당한다.*/
 
-//   // page 할당에 성공하였을 때
-//   if(pg != NULL) {
-//     //page에 들어갈 vm entry를 하나 할당한다.
-//     struct vm_entry * entry = (struct vm_entry*)malloc(sizeof(struct vm_entry));
+   // page 할당에 성공하였을 때
+   if(pg != NULL) {
+     //page에 들어갈 vm entry를 하나 할당한다.
+     struct vm_entry * entry = (struct vm_entry*)malloc(sizeof(struct vm_entry));
 
-//     //할당에 실패시
-//     if(entry == NULL)
-//       return false;
+     //할당에 실패시
+     if(entry == NULL)
+       return false;
 
-//     // vm_entry 필드 초기화
-//     entry->type = VM_ANON;
-//     entry->vaddr = pg_round_down(addr);
-//     entry->writable = true;
-//     entry->is_loaded = true;
+     // vm_entry 필드 초기화
+     entry->type = VM_ANON;
+     entry->vaddr = pg_round_down(addr);
+     entry->writable = true;
+     entry->is_loaded = true;
 
 //     pg->vme = entry;
 
-//     if(!install_page(entry->vaddr, pg, true)) {
-//       palloc_free_page(pg);
-//       free(entry);
-//       return false;
-//     }
+     if(!install_page(entry->vaddr, pg, true)) {
+       palloc_free_page(pg);
+       free(entry);
+       return false;
+     }
 
-//     insert_vme(&thread_current()->vm, vme);
-//   }
+     insert_vme(&thread_current()->vm, entry);
+   }
 
-//   return true;
-// }
+   return true;
+ }
 
 // 페이지 할당 -> 데이터 로드 -> 페이지 테이블 설정 역할을 하는 함수이다.
 bool handle_mm_fault (struct vm_entry * vme){

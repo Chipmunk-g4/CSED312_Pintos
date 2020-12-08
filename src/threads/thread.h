@@ -110,6 +110,9 @@ struct thread
     // 가상 메모리를 저장할 해시 테이블
     struct hash vm;
 
+    // list for support file-memory mapping
+    struct list file_mem_list;
+
 #ifdef USERPROG
     /* Shared between userprog/process.c and userprog/syscall.c. */
     uint32_t *pagedir;         /* Page directory. */
