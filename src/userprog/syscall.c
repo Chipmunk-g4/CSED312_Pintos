@@ -502,7 +502,7 @@ void munmap(int map_id) {
       lock_acquire(&filesys_lock);
 
       //delete all element in vme_list
-      for(struct list_elem * ve = list_begin(); ve != list_end(); ve = list_next(ve)) {
+      for(struct list_elem * ve = list_begin(&(fm->vme_list)); ve != list_end(&(fm->vme_list)); ve = list_next(ve)) {
         struct vm_entry * vme = list_entry(ve, struct vm_entry, mmap_elem);
         if(vme->is_loaded) {
           uint32_t *pd = thread_current()->pagedir;
@@ -521,7 +521,7 @@ void munmap(int map_id) {
         list_remove(ve);
         ve = tmp;
         // hash의 vm entry에서도 제거한다.
-        delete_vme(&(thread_current->vm), vme);
+        delete_vme(&(thread_current()->vm), vme);
       }
 
       //close mapped file
