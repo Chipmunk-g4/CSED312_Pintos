@@ -127,6 +127,7 @@ page_fault(struct intr_frame *f)
   bool write;       /* True: access was write, false: access was read. */
   bool user;        /* True: access by user, false: access by kernel. */
   void *fault_addr; /* Fault address. */
+  bool load = false;
 
   /* Stack Growth flags*/
   bool in_max_stack;  /* True: 0xC0000000 ~ 0xBF800000 (8MB), False: else*/
@@ -166,13 +167,18 @@ page_fault(struct intr_frame *f)
   // vme가 존재하는 경우
   if(vme != NULL){
     // vme에 해당하는 데이터가 물리 메모리에 올라오지 못한 경우 에러 출력
-    if(!handle_mm_fault(vme)){
-        printf("Page fault at %p: %s error %s page in %s context.\n",
-               fault_addr,
-               not_present ? "not present" : "rights violation",
-               write ? "writing" : "reading",
-               user ? "user" : "kernel");
-        kill(f);
-    }
+    load = handle_mm_fault(vme);
+  }
+
+  /* To implement virtual memory, delete the rest of the function
+     body, and replace it with code that brings in the page to
+     which fault_addr refers. */
+  if(load == false){
+	  printf ("Page fault at %p: %s error %s page in %s context.\n",
+      	    fault_addr,
+       	    not_present ? "not present" : "rights violation",
+            write ? "writing" : "reading",
+            user ? "user" : "kernel");
+	  kill (f);
   }
 }
