@@ -23,6 +23,7 @@ static struct vm_entry * check_vaddr(const void *vaddr, void* esp);
 static void check_valid_buffer(const char *buffer, unsigned size, void *esp, bool write_enabled);
 static void check_valid_string(const char *str, void *esp);
 
+static void get_argument(int *esp, int *arg, int count);
 
 static void syscall_halt(void);
 static pid_t syscall_exec(const char *);
@@ -35,6 +36,9 @@ static int syscall_read(int, void *, unsigned);
 static int syscall_write(int, const void *, unsigned);
 static void syscall_seek(int, unsigned);
 static unsigned syscall_tell(int);
+
+int mmap(int fd, void *addr);
+void munmap(int map_id);
 
 /* Registers the system call interrupt handler. */
 void syscall_init(void)
@@ -49,157 +53,97 @@ static void
 syscall_handler(struct intr_frame *f)
 {
     void *esp = f->esp;
-    int syscall_num;
+    int arg[4]; // argument를 저장하는 공간이다.
 
-    // 주소 유효성 검사
     check_vaddr(esp, f->esp);
-    check_vaddr(esp + sizeof(uintptr_t) - 1, f->esp);
-    syscall_num = *(int *)esp;
 
-    switch (syscall_num)
-    {
+    switch (*(int *)(f->esp)) { // f->esp에는 syscall number가 담겨있다.
     case SYS_HALT:
-    {
-        syscall_halt();
-        NOT_REACHED();
-    }
+      syscall_halt();
+      break;
     case SYS_EXIT:
-    {
-        int status;
-
-        status = *(int *)(esp + sizeof(uintptr_t));
-
-        syscall_exit(status);
-        NOT_REACHED();
-    }
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      syscall_exit(arg[0]);
+      break;
     case SYS_EXEC:
-    {
-        char *cmd_line;
-
-        cmd_line = *(char **)(esp + sizeof(uintptr_t));
-
-        // 입력되는 문자열이 유효한지 검사한다.
-        check_valid_string((const char *)cmd_line, f->esp);
-
-        f->eax = (uint32_t)syscall_exec(cmd_line);
-        break;
-    }
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      check_valid_string((const void *)arg[0], f->esp);
+      f -> eax = syscall_exec(arg[0]); // 계산 후 결과를 eax에 저장
+      break;
     case SYS_WAIT:
-    {
-        pid_t pid;
-
-        pid = *(pid_t *)(esp + sizeof(uintptr_t));
-
-        f->eax = (uint32_t)syscall_wait(pid);
-        break;
-    }
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      f->eax = syscall_wait(arg[0]); // 계산 후 결과를 eax에 저장
+      break;
     case SYS_CREATE:
-    {
-        char *file;
-        unsigned initial_size;
-
-        file = *(char **)(esp + sizeof(uintptr_t));
-        initial_size = *(unsigned *)(esp + 2 * sizeof(uintptr_t));
-
-        // 입력되는 문자열이 유효한지 검사한다.
-        check_valid_string((const char *)file, f->esp);
-
-        f->eax = (uint32_t)syscall_create(file, initial_size);
-        break;
-    }
+      get_argument(f->esp, arg, 2); // 인자: 2개
+      check_valid_string((const void *)arg[0], f->esp);
+      f->eax = syscall_create((const char *) arg[0], arg[1]); // 계산 후 결과를 eax에 저장
+      break;
     case SYS_REMOVE:
-    {
-        char *file;
-
-        file = *(char **)(esp + sizeof(uintptr_t));
-
-        // 입력되는 문자열이 유효한지 검사한다.
-        check_valid_string((const char *)file, f->esp);
-
-        f->eax = (uint32_t)syscall_remove(file);
-        break;
-    }
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      check_valid_string((const void *)arg[0], f->esp);
+      f->eax = syscall_remove((const char *) arg[0]); // 계산 후 결과를 eax에 저장
+      break;
     case SYS_OPEN:
-    {
-        char *file;
-
-        file = *(char **)(esp + sizeof(uintptr_t));
-
-        // 입력되는 문자열이 유효한지 검사한다.
-        check_valid_string((const char *)file, f->esp);
-
-        f->eax = (uint32_t)syscall_open(file);
-        break;
-    }
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      check_valid_string((const void *)arg[0], f->esp);
+      f->eax = syscall_open((const char *) arg[0]); // 계산 후 결과를 eax에 저장
+      break;
     case SYS_FILESIZE:
-    {
-        int fd;
-
-        fd = *(int *)(esp + sizeof(uintptr_t));
-
-        f->eax = (uint32_t)syscall_filesize(fd);
-        break;
-    }
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      f->eax = syscall_filesize((int) arg[0]); // 계산 후 결과를 eax에 저장
+      break;
     case SYS_READ:
-    {
-        int fd;
-        void *buffer;
-        unsigned size;
-
-        fd = *(int *)(esp + sizeof(uintptr_t));
-        buffer = *(void **)(esp + 2 * sizeof(uintptr_t));
-        size = *(unsigned *)(esp + 3 * sizeof(uintptr_t));
-
-        // 입력되는 버퍼가 유효한지 검사한다.
-        check_valid_buffer((const char *)buffer, (unsigned)size, f->esp, false);
-
-        f->eax = (uint32_t)syscall_read(fd, buffer, size);
-        break;
-    }
+      get_argument(f->esp, arg, 3); // 인자: 3개
+      check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, true);
+      f->eax = syscall_read(arg[0],arg[1],arg[2]);
+      break;
     case SYS_WRITE:
-    {
-        int fd;
-        void *buffer;
-        unsigned size;
-
-        fd = *(int *)(esp + sizeof(uintptr_t));
-        buffer = *(void **)(esp + 2 * sizeof(uintptr_t));
-        size = *(unsigned *)(esp + 3 * sizeof(uintptr_t));
-
-        // 입력되는 버퍼가 유효한지 검사한다.
-        check_valid_buffer((const char *)buffer, (unsigned)size, f->esp, true);
-
-        f->eax = (uint32_t)syscall_write(fd, buffer, size);
-        break;
-    }
+      get_argument(f->esp, arg, 3); // 인자: 3개
+      check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, true);
+      f->eax = syscall_write(arg[0],arg[1],arg[2]);
+      break;
     case SYS_SEEK:
-    {
-        int fd;
-        unsigned position;
-        fd = *(int *)(esp + sizeof(uintptr_t));
-        position = *(unsigned *)(esp + 2 * sizeof(uintptr_t));
-
-        syscall_seek(fd, position);
-        break;
-    }
+      get_argument(f->esp, arg, 2); // 인자: 2개
+      syscall_seek((int)arg[0], (unsigned)arg[1]);
+      break;
     case SYS_TELL:
-    {
-        int fd;
-        fd = *(int *)(esp + sizeof(uintptr_t));
-
-        f->eax = (uint32_t)syscall_tell(fd);
-        break;
-    }
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      f->eax = syscall_tell((int) arg[0]); // 계산 후 결과를 eax에 저장
+      break;
     case SYS_CLOSE:
-    {
-        int fd;
-        fd = *(int *)(esp + sizeof(uintptr_t));
-
-        syscall_close(fd);
-        break;
-    }
+      get_argument(f->esp, arg, 1); // 인자: 1개
+      syscall_close((int) arg[0]);
+      break;
+    case SYS_MMAP:
+      get_argument(f->esp, arg, 2);
+		  f->eax = mmap(arg[0],(void *)arg[1]);
+      break;
+    case SYS_MUNMAP:
+      get_argument(f->esp, arg, 1);
+		  munmap(arg[0]);
+      break;
     default:
-        syscall_exit(-1);
+      // 유효하지 않은 syscall
+      syscall_exit(-1);
+  }
+}
+
+// 유저스택에 있는 데이터를 esp에서 4byte크기로 count개수 만큼 가져온다.
+static void get_argument(int *esp, int *arg, int count){
+
+    void *back_up = (void *)esp;
+
+    // every count
+    while (count--)
+    {
+        esp++;
+        // check whether bound of esp is legal
+        check_vaddr((const void *)(esp), back_up);
+        check_vaddr((const void *)(esp+3), back_up);
+
+        // get value
+        *(arg++) = *esp;
     }
 }
 
@@ -456,4 +400,52 @@ void syscall_close(int fd)
     list_remove(&fde->fdtelem);
     palloc_free_page(fde);
     lock_release(&filesys_lock);
+}
+
+/**/
+int mmap(int fd, void *addr) {
+//  can't use standard in/out as mapping
+  if(fd == 0 || fd == 1) return -1;
+//  if address is NULL
+  if(addr == NULL || addr == 0) return -1;
+//  if address is not align in PGSIZE
+  if(pg_ofs(addr) != 0) return -1;
+
+//  lock filesys
+  lock_acquire(&filesys_lock);
+
+  struct file * f = NULL;
+  struct file_descriptor_entry * fde = process_get_fde(fd);
+  //cannot find file descriptor or file not found
+  if(fde != NULL && fde->file != NULL) {
+    //  reopen file to prevent file close terminates all opened file
+    f = file_reopen(fde->file);
+  }
+  if(f == NULL) {
+    //    release the filesys lock and return error
+    lock_release(&filesys_lock);
+    return -1;
+  }
+
+  /*TODO: map memory page*/
+
+  int id = 1;
+  struct list * curr_fm_list = &(thread_current()->file_mem_list);
+  if(!list_empty(curr_fm_list)) {
+    id = list_entry(list_back(curr_fm_list), struct file_mem, elem)->id + 1;
+  }
+
+  struct file_mem * fm_elem = (struct file_mem *)malloc(sizeof(struct file_mem));
+  fm_elem->id = id;
+  fm_elem->file = f;
+  list_init(&(fm_elem->vme_list));
+  list_push_back(curr_fm_list, &(fm_elem->elem));
+
+  lock_release(&filesys_lock);
+  return id;
+}
+
+/**/
+void munmap(int map_id) {
+
 }

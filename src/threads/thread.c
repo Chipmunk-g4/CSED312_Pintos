@@ -232,9 +232,6 @@ tid_t thread_create(const char *name, int priority,
     sf->eip = switch_entry;
     sf->ebp = 0;
 
-    // VM을 초기화 한다.
-    vm_init (&t->vm);
-
     /* Add to run queue. */
     thread_unblock(t);
 

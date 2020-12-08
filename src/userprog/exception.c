@@ -127,6 +127,7 @@ page_fault(struct intr_frame *f)
   bool write;       /* True: access was write, false: access was read. */
   bool user;        /* True: access by user, false: access by kernel. */
   void *fault_addr; /* Fault address. */
+  bool load = false;
 
   /* Stack Growth flags*/
   bool in_max_stack;  /* True: 0xC0000000 ~ 0xBF800000 (8MB), False: else*/
@@ -136,15 +137,14 @@ page_fault(struct intr_frame *f)
   bool in_max_growth; /* True: esp - 32byte <= addr, False: else*/
           //stack이 한번에 최대한 성장할 수 있는 범위 안에 있는 주소인가?
 
-          /* Obtain faulting address, the virtual address that was
-           accessed to cause the fault.  It may point to code or to
-           data.  It is not necessarily the address of the instruction
-           that caused the fault (that's f->eip).
-           See [IA32-v2a] "MOV--Move to/from Control Registers" and
-           [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
-           (#PF)". */
-          asm("movl %%cr2, %0"
-          : "=r"(fault_addr));
+  /* Obtain faulting address, the virtual address that was
+    accessed to cause the fault.  It may point to code or to
+    data.  It is not necessarily the address of the instruction
+    that caused the fault (that's f->eip).
+    See [IA32-v2a] "MOV--Move to/from Control Registers" and
+    [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
+    (#PF)". */
+  asm("movl %%cr2, %0" : "=r"(fault_addr));
 
   /* Turn interrupts back on (they were only off so that we could
    be assured of reading CR2 before it changed). */
@@ -158,22 +158,32 @@ page_fault(struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  /* Determine Stack Growth Condition. */
+  in_max_stack = fault_addr <= 0xC0000000 && fault_addr >= 0xBF800000;
+  must_growth = not_present;
+  in_max_growth = f->esp - 32 <= fault_addr;
+
   /* kill관련 코드를 삭제한 후 fault_addr의 유효성을 검사하고, 이를 처리할 함수 handle_mm_fault를 호출한다. */
   if(!not_present) syscall_exit(-1);
-  
+
+  /* Check stack growth condition*/
+  if (in_max_stack && must_growth && in_max_growth ) {
+    //Perform Stack Growth
+    //If stack expend success
+    if(expand_stack(fault_addr))
+      return;
+  }
+
   // fault_addr에 해당하는 vm_entry 가져오기
   struct vm_entry * vme = find_vme(fault_addr);
 
-  // vme가 없을때
-  if(!vme){
-    // vme에 해당하는 데이터가 물리 메모리에 잘 올라오지 못한 경우 에러 출력
-    if(!handle_mm_fault(vme)){
-        printf("Page fault at %p: %s error %s page in %s context.\n",
-               fault_addr,
-               not_present ? "not present" : "rights violation",
-               write ? "writing" : "reading",
-               user ? "user" : "kernel");
-        kill(f);
-    }
+  // vme가 존재하는 경우
+  if(vme != NULL){
+    // vme에 해당하는 데이터가 물리 메모리에 올라오지 못한 경우 에러 출력
+    load = handle_mm_fault(vme);
+  }
+
+  if(load == false){
+	  syscall_exit(-1);
   }
 }
