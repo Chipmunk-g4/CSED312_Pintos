@@ -174,7 +174,6 @@ page_fault(struct intr_frame *f)
   /* Check stack growth condition*/
   if (in_max_stack && must_growth && in_max_growth ) {
     //Perform Stack Growth
-
     //If stack expend success
     if(expand_stack(fault_addr))
       return;

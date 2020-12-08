@@ -28,6 +28,13 @@ struct vm_entry{
     struct hash_elem elem; // 해시 테이블 요소
 };
 
+struct file_mem {
+    int id;
+    struct list_elem elem;
+    struct file * file;
+    struct list vme_list;
+};
+
 void vm_init (struct hash *vm); // 해시 초기화
 
 bool insert_vme (struct hash *vm, struct vm_entry *vme); // vm에 vme 삽입
