@@ -184,6 +184,11 @@ void process_exit(void)
     file_close(thread_get_running_file());
     lock_release(filesys_lock);
 
+    struct list * ml = &(thread_current()->file_mem_list);
+    for(struct list_elem *e = list_begin(ml); e != list_end(ml); e = list_next(e)) {
+      munmap(list_entry(e, struct file_mem, elem)->id);
+    }
+
     // VM을 제거한다.
     vm_destroy (&cur->vm);
 

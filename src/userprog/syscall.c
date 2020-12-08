@@ -491,12 +491,50 @@ int mmap(int fd, void *addr) {
 
 /*map id에 해당하는 memory mapping을 해제한다.*/
 void munmap(int map_id) {
+  if(map_id < 1)
+    return;
+
   struct list * ml = &(thread_current()->file_mem_list);
   for(struct list_elem *e = list_begin(ml); e != list_end(ml); e = list_next(e)) {
     struct file_mem * fm = list_entry(e, struct file_mem, elem);
 //    list에서 mapping id가 인자로 들어온 map_id와 같을 때
     if(fm->id == map_id) {
+      lock_acquire(&filesys_lock);
 
+      //delete all element in vme_list
+      for(struct list_elem * ve = list_begin(); ve != list_end(); ve = list_next(ve)) {
+        struct vm_entry * vme = list_entry(ve, struct vm_entry, mmap_elem);
+        if(vme->is_loaded) {
+          uint32_t *pd = thread_current()->pagedir;
+//          save physical address due to clear page
+          void * paddr = pagedir_get_page(pd, vme->vaddr);
+//          if dirty bit is true, write back
+          if(pagedir_is_dirty(pd, vme->vaddr))
+            file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+//          clear page
+          pagedir_clear_page(pd, vme->vaddr);
+//          free memory
+          palloc_free_page(paddr);
+        }
+        // list를 순차적으로 방문하는 것을 방해하지 않으면서 element 제거
+        struct list_elem * tmp = list_prev(ve);
+        list_remove(ve);
+        ve = tmp;
+        // hash의 vm entry에서도 제거한다.
+        delete_vme(&(thread_current->vm), vme);
+      }
+
+      //close mapped file
+      file_close(fm->file);
+      //remove from list
+      list_remove(e);
+      //free mapping
+      free(fm);
+
+      lock_release(&filesys_lock);
+      return;
     }
   }
+
+//  cannot find mapping with map_id
 }
