@@ -158,9 +158,28 @@ page_fault(struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  /* Determine Stack Growth Condition. */
+  in_max_stack = fault_addr <= 0xC0000000 && fault_addr >= 0xBF800000;
+  must_growth = not_present;
+  in_max_growth = f->esp - 32 <= fault_addr;
+
+  /* If page fault occurs in user mode, terminates the current
+  process. */
+  if (user)
+    syscall_exit(-1);
+
   /* kill관련 코드를 삭제한 후 fault_addr의 유효성을 검사하고, 이를 처리할 함수 handle_mm_fault를 호출한다. */
   if(!not_present) syscall_exit(-1);
-  
+
+  /* Check stack growth condition*/
+  if (in_max_stack && must_growth && in_max_growth ) {
+    //Perform Stack Growth
+
+    //If stack expend success
+    if(expand_stack(fault_addr))
+      return;
+  }
+
   // fault_addr에 해당하는 vm_entry 가져오기
   struct vm_entry * vme = find_vme(fault_addr);
 
