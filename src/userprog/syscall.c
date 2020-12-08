@@ -416,7 +416,7 @@ void syscall_close(int fd)
     lock_release(&filesys_lock);
 }
 
-/**/
+/*fd와 address를 서로 mapping 해주고, 맵핑 id를 리턴해준다.*/
 int mmap(int fd, void *addr) {
 //  can't use standard in/out as mapping
   if(fd == 0 || fd == 1) return -1;
@@ -429,30 +429,35 @@ int mmap(int fd, void *addr) {
   lock_acquire(&filesys_lock);
 
   struct file * f = NULL;
+//  get file descriptor entry
   struct file_descriptor_entry * fde = process_get_fde(fd);
-  //cannot find file descriptor or file not found
   if(fde != NULL && fde->file != NULL) {
     //  reopen file to prevent file close terminates all opened file
     f = file_reopen(fde->file);
   }
+//  cannot reopen file or cannot find file descriptor entry or file
   if(f == NULL) {
     //    release the filesys lock and return error
     lock_release(&filesys_lock);
     return -1;
   }
 
+//  get latest entry's id if list_empty then set id as 1
   int id = 1;
   struct list * curr_fm_list = &(thread_current()->file_mem_list);
   if(!list_empty(curr_fm_list)) {
     id = list_entry(list_back(curr_fm_list), struct file_mem, elem)->id + 1;
   }
 
+//  create new file memory mapping element
   struct file_mem * fm_elem = (struct file_mem *)malloc(sizeof(struct file_mem));
+//  set field
   fm_elem->id = id;
   fm_elem->file = f;
   list_init(&(fm_elem->vme_list));
 
   size_t file_size = file_length(f);
+//  file size에 맞게 page를 생성한다.
   for(int size = file_size; size > 0; size -= PGSIZE) {
     //  check address doesn't contained in exist vme
     //  if vme found
@@ -460,9 +465,9 @@ int mmap(int fd, void *addr) {
       lock_release(&filesys_lock);
       return -1;
     }
-
+//  vme 생성
     struct vm_entry * vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
-
+//  vme field 채우기
     vme->type = VM_FILE;
     vme->vaddr = addr + file_size - size;
     vme->writable = true;
@@ -473,16 +478,25 @@ int mmap(int fd, void *addr) {
     vme->offset = file_size - size;
     vme->read_bytes = size >= PGSIZE ? PGSIZE : size;
     vme->zero_bytes = PGSIZE - vme->read_bytes;
-
+//  생성한 vme를 file memory mapping의 vme 리스트에 추가한다.
     list_push_back(&(fm_elem->vme_list), &(vme->mmap_elem));
   }
 
+//  thread의 fm list에 추가한다.
   list_push_back(curr_fm_list, &(fm_elem->elem));
+// 정상 종료시 lock 해제
   lock_release(&filesys_lock);
   return id;
 }
 
-/**/
+/*map id에 해당하는 memory mapping을 해제한다.*/
 void munmap(int map_id) {
+  struct list * ml = &(thread_current()->file_mem_list);
+  for(struct list_elem *e = list_begin(ml); e != list_end(ml); e = list_next(e)) {
+    struct file_mem * fm = list_entry(e, struct file_mem, elem);
+//    list에서 mapping id가 인자로 들어온 map_id와 같을 때
+    if(fm->id == map_id) {
 
+    }
+  }
 }
