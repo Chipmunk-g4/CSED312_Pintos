@@ -419,7 +419,7 @@ int mmap(int fd, void *addr) {
   list_init (&fm->vme_list);
 
   // fd에 해당하는 파일 열기
-  struct file *mmap_file = file_reopen(process_get_file(fd));
+  struct file *mmap_file = file_reopen(process_get_fde(fd)->file);
   if(mmap_file == NULL) return -1;
 
   // 파일 설정 후 file_mem_list에 넣기
