@@ -4,8 +4,6 @@
 #include "devices/block.h"
 #include "lib/kernel/bitmap.h"
 
-#define BLOCK_
-
 struct lock swap_lock;
 struct block * swap_block;
 struct bitmap * swap_map;
@@ -26,11 +24,23 @@ void swap_init(void) {
 void swap_in(size_t index, void *frame) {
   lock_acquire(&swap_lock);
 
+//  before read data from block, check index is valid. (== is occupied)
+  if(bitmap_test(swap_map, index) == 0) return;
+
+  block_read(swap_block, index, frame);
+
+//  after read from block, set bit 1 to 0 (discard bit)
+  bitmap_flip(swap_map, index);
+
   lock_release(&swap_lock);
 }
 
 size_t swap_out(void *frame) {
   lock_acquire(&swap_lock);
+
+  int index = bitmap_scan_and_flip(swap_map, 0, 1, 0);
+  block_write(swap_block, index, frame);
+
   lock_release(&swap_lock);
   return 0;
 }

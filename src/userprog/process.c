@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -725,6 +726,7 @@ bool handle_mm_fault (struct vm_entry * vme){
             }
             break;
         case VM_ANON:
+            swap_in(vme->swap_slot, kaddr);
             break;
         default:
             return false;
