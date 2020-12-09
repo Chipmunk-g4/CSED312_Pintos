@@ -156,7 +156,6 @@ void delete_page(struct page *page) {
   if (page != NULL) {
     if (lru_clock == page)
       lru_clock = list_entry(list_next(&page->lru_elem), struct page, lru_elem);
-
     list_remove(&(page->lru_elem));
   }
 }
@@ -170,14 +169,12 @@ struct page *alloc_page(enum palloc_flags flags) {
     perform_swap_out();
     addr = palloc_get_page(flags);
   }
-
   struct page *p = (struct page *) malloc(sizeof(struct page));
   // initialize page's field
   p->addr = addr;
   p->thread = thread_current();
   // insert page into lru list
   insert_page(p);
-
   return p;
 }
 
@@ -223,6 +220,7 @@ struct page *get_next_clock(void) {
 
 void perform_swap_out(void) {
   lock_acquire(&lru_lock);
+
   while (true) {
     struct page *p = get_next_clock();
     if (p == NULL) break;
@@ -234,6 +232,7 @@ void perform_swap_out(void) {
 
     // if reaches here, victim is selected
     // if dirty bit true or it's swap type
+
     if (pagedir_is_dirty(p->thread->pagedir, p->vme->vaddr) || p->vme->type == VM_ANON) {
       // if file type, write back
       if (p->vme->type == VM_FILE) {
@@ -247,7 +246,6 @@ void perform_swap_out(void) {
         p->vme->swap_slot = swap_out(p->addr);
       }
     }
-
 
     p->vme->is_loaded = false;
 

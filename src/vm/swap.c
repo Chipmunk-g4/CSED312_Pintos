@@ -3,12 +3,13 @@
 #include "threads/synch.h"
 #include "devices/block.h"
 #include "lib/kernel/bitmap.h"
+#include "threads/vaddr.h"
 
 struct lock swap_lock;
 struct block * swap_block;
 struct bitmap * swap_map;
 
-#define BLOCK_SECTOR 8
+#define BLOCK_SECTOR (PGSIZE/BLOCK_SECTOR_SIZE)
 
 void swap_init(void) {
   // initialize lock
@@ -43,9 +44,10 @@ size_t swap_out(void *frame) {
 
   int index = bitmap_scan_and_flip(swap_map, 0, 1, 0);
 
-  for(int i = 0; i < BLOCK_SECTOR; i++)
-    block_write(swap_block, index * BLOCK_SECTOR_SIZE + i, frame + i * BLOCK_SECTOR_SIZE);
+  for(int i = 0; i < BLOCK_SECTOR; i++) {
+    block_write(swap_block, index * BLOCK_SECTOR + i, frame + i * BLOCK_SECTOR_SIZE);
+  }
 
   lock_release(&swap_lock);
-  return 0;
+  return index;
 }
