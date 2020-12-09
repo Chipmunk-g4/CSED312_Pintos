@@ -35,6 +35,14 @@ struct file_mem {
     struct list vme_list;
 };
 
+// page struct to implement swap
+struct page {
+    void * addr;
+    struct vm_entry * vme;
+    struct thread * thread;
+    struct list_elem lru_elem;
+};
+
 void vm_init (struct hash *vm); // 해시 초기화
 
 bool insert_vme (struct hash *vm, struct vm_entry *vme); // vm에 vme 삽입
@@ -47,5 +55,12 @@ void vm_destroy (struct hash * vm); // vm 파괴
 bool load_file(void *kaddr, struct vm_entry *vme); // 디스크에 존재하는 페이지를 물리 메모리로 로드하는 함수
 
 void do_munmap(struct file_mem *file_mem); //file_mem에 연결된 모든 vm_entry제거 및 페이지 테이블 엔트리 제거.
+
+void lru_list_init(void);
+
+void insert_page(struct page * page);
+void delete_page(struct page * page);
+
+void free_page(void);
 
 #endif

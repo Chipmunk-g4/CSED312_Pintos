@@ -710,6 +710,11 @@ static void push_arguments(int argc, char **argv, void **esp)
 bool handle_mm_fault (struct vm_entry * vme){
     // 1. 사용할 물리 메모리 할당하기
     uint8_t *kaddr = palloc_get_page(PAL_USER);
+    // page가 없어 swap_out이 필요할 때,
+    if(kaddr == NULL) {
+      free_page();
+      void * page = palloc_get_page(PAL_USER);
+    }
 
     // 2. load_file을 사용해서 데이터 로드하기
     // 3. page table 세팅하기

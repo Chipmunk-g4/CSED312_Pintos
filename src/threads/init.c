@@ -38,6 +38,7 @@
 #include "filesys/fsutil.h"
 #endif
 #include "vm/swap.h"
+#include "vm/page.h"
 
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
@@ -130,6 +131,7 @@ int main(void)
     printf("Boot complete.\n");
 
     swap_init();
+    lru_list_init();
 
     /* Run actions specified on kernel command line. */
     run_actions(argv);
