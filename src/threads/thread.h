@@ -112,6 +112,7 @@ struct thread
 
     // list for support file-memory mapping
     struct list file_mem_list;
+    int next_mapid; // 다음에 사용될 id
 
 #ifdef USERPROG
     /* Shared between userprog/process.c and userprog/syscall.c. */

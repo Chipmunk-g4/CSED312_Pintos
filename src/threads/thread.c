@@ -640,6 +640,7 @@ init_thread(struct thread *t, const char *name, int priority)
     t->priority = t->original_priority = priority;
     list_init(&t->donators);
     list_init(&t->file_mem_list);
+    t->next_mapid = 1;
     t->donee = NULL;
     if (thread_mlfqs)
     {
