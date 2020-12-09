@@ -2,13 +2,25 @@
 #include "threads/vaddr.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "lib/kernel/list.h"
+#include "threads/synch.h"
 #include "userprog/pagedir.h"
 #include "filesys/file.h"
 #include <string.h>
 
+struct list lru_list;
+struct lock lru_lock;
+struct page * lru_clock;
+
 static unsigned vm_hash_func (const struct hash_elem *e, void *aux UNUSED); //해시 elem e의 vaddr에 대한 해시값 반환
 static bool vm_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED); // 입력된 두 hash elem의 vaddr을 비교하여 a가 b보다 작은경우 true, 반대 false 반환
 static void hash_destroy_sub (struct hash_elem *e, void *aux UNUSED); // vm_destroy 함수의 hash_destroy 함수를 사용하기 위해서 새롭게 정의된 함수이다.
+
+void lru_list_init() {
+  list_init(&lru_list);
+  lock_init(&lru_lock);
+  lru_clock = NULL;
+}
 
 void vm_init (struct hash *vm){ // 해시 
     // 해시를 초기화 한다.
@@ -118,4 +130,22 @@ void do_munmap(struct file_mem *file_mem){
         e = list_remove (e);
         delete_vme (&thread_current()->vm, vme);
     }
+}
+
+void insert_page(struct page * page) {
+  if(page != NULL) {
+    lock_acquire(&lru_lock);
+    lock_release(&lru_lock);
+  }
+}
+
+void delete_page(struct page * page) {
+  if(page != NULL) {
+    lock_acquire(&lru_lock);
+    lock_release(&lru_lock);
+  }
+}
+
+void free_page() {
+
 }
