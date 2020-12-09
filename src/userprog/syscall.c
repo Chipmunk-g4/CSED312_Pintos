@@ -14,6 +14,7 @@
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
 #include "vm/page.h"
+#include "threads/malloc.h"
 
 struct lock filesys_lock;
 
@@ -252,7 +253,6 @@ static int syscall_wait(pid_t pid)
 static bool syscall_create(const char *file, unsigned initial_size)
 {
     bool success;
-    int i;
 
     lock_acquire(&filesys_lock);
     success = filesys_create(file, (off_t)initial_size);
@@ -265,7 +265,6 @@ static bool syscall_create(const char *file, unsigned initial_size)
 static bool syscall_remove(const char *file)
 {
     bool success;
-    int i;
 
     lock_acquire(&filesys_lock);
     success = filesys_remove(file);
@@ -279,7 +278,6 @@ static int syscall_open(const char *file)
 {
     struct file_descriptor_entry *fde;
     struct file *new_file;
-    int i;
 
     fde = palloc_get_page(0);
     if (!fde)
@@ -416,12 +414,15 @@ void syscall_close(int fd)
     lock_release(&filesys_lock);
 }
 
-/**/
+/*fd와 address를 서로 mapping 해주고, 맵핑 id를 리턴해준다.*/
 int mmap(int fd, void *addr) {
+
 //  can't use standard in/out as mapping
   if(fd == 0 || fd == 1) return -1;
+
 //  if address is NULL
   if(addr == NULL || addr == 0) return -1;
+
 //  if address is not align in PGSIZE
   if(pg_ofs(addr) != 0) return -1;
 
@@ -429,37 +430,115 @@ int mmap(int fd, void *addr) {
   lock_acquire(&filesys_lock);
 
   struct file * f = NULL;
+//  get file descriptor entry
   struct file_descriptor_entry * fde = process_get_fde(fd);
-  //cannot find file descriptor or file not found
   if(fde != NULL && fde->file != NULL) {
     //  reopen file to prevent file close terminates all opened file
     f = file_reopen(fde->file);
   }
+//  cannot reopen file or cannot find file descriptor entry or file
   if(f == NULL) {
     //    release the filesys lock and return error
     lock_release(&filesys_lock);
     return -1;
   }
 
-  /*TODO: map memory page*/
-
+//  get latest entry's id if list_empty then set id as 1
   int id = 1;
   struct list * curr_fm_list = &(thread_current()->file_mem_list);
   if(!list_empty(curr_fm_list)) {
     id = list_entry(list_back(curr_fm_list), struct file_mem, elem)->id + 1;
   }
 
+//  create new file memory mapping element
   struct file_mem * fm_elem = (struct file_mem *)malloc(sizeof(struct file_mem));
+//  set field
   fm_elem->id = id;
   fm_elem->file = f;
   list_init(&(fm_elem->vme_list));
-  list_push_back(curr_fm_list, &(fm_elem->elem));
 
+  size_t file_size = file_length(f);
+//  file size에 맞게 page를 생성한다.
+  for(int size = file_size; size > 0; size -= PGSIZE) {
+    //  check address doesn't contained in exist vme
+    //  if vme found
+
+    if(find_vme(addr + file_size - size) != NULL) {
+      lock_release(&filesys_lock);
+      return -1;
+    }
+
+//  vme 생성
+    struct vm_entry * vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+//  vme field 채우기
+    vme->type = VM_FILE;
+    vme->vaddr = addr + file_size - size;
+    vme->writable = true;
+
+    vme->is_loaded = false;
+    vme->file = f;
+
+    vme->offset = file_size - size;
+    vme->read_bytes = size >= PGSIZE ? PGSIZE : size;
+    vme->zero_bytes = PGSIZE - vme->read_bytes;
+//  생성한 vme를 file memory mapping의 vme 리스트에 추가한다.
+    list_push_back(&(fm_elem->vme_list), &(vme->mmap_elem));
+  }
+
+//  thread의 fm list에 추가한다.
+  list_push_back(curr_fm_list, &(fm_elem->elem));
+// 정상 종료시 lock 해제
   lock_release(&filesys_lock);
+
   return id;
 }
 
-/**/
+/*map id에 해당하는 memory mapping을 해제한다.*/
 void munmap(int map_id) {
+  if(map_id < 1)
+    return;
 
+  struct list * ml = &(thread_current()->file_mem_list);
+  for(struct list_elem *e = list_begin(ml); e != list_end(ml); e = list_next(e)) {
+    struct file_mem * fm = list_entry(e, struct file_mem, elem);
+//    list에서 mapping id가 인자로 들어온 map_id와 같을 때
+    if(fm->id == map_id) {
+      lock_acquire(&filesys_lock);
+
+      //delete all element in vme_list
+      for(struct list_elem * ve = list_begin(&(fm->vme_list)); ve != list_end(&(fm->vme_list)); ve = list_next(ve)) {
+        struct vm_entry * vme = list_entry(ve, struct vm_entry, mmap_elem);
+        if(vme->is_loaded) {
+          uint32_t *pd = thread_current()->pagedir;
+//          save physical address due to clear page
+          void * paddr = pagedir_get_page(pd, vme->vaddr);
+//          if dirty bit is true, write back
+          if(pagedir_is_dirty(pd, vme->vaddr))
+            file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+//          clear page
+          pagedir_clear_page(pd, vme->vaddr);
+//          free memory
+          palloc_free_page(paddr);
+        }
+        // list를 순차적으로 방문하는 것을 방해하지 않으면서 element 제거
+        struct list_elem * tmp = list_prev(ve);
+        list_remove(ve);
+        ve = tmp;
+        // hash의 vm entry에서도 제거한다.
+        delete_vme(&(thread_current()->vm), vme);
+      }
+
+      //close mapped file
+      file_close(fm->file);
+      //remove from list
+      list_remove(e);
+      //free mapping
+      free(fm);
+
+      lock_release(&filesys_lock);
+      return;
+    }
+  }
+
+//  cannot find mapping with map_id
 }
