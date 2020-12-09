@@ -46,4 +46,6 @@ void vm_destroy (struct hash * vm); // vm 파괴
 
 bool load_file(void *kaddr, struct vm_entry *vme); // 디스크에 존재하는 페이지를 물리 메모리로 로드하는 함수
 
+void do_munmap(struct file_mem *file_mem); //file_mem에 연결된 모든 vm_entry제거 및 페이지 테이블 엔트리 제거.
+
 #endif

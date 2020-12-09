@@ -93,3 +93,29 @@ bool load_file(void *kaddr, struct vm_entry *vme){
         return false;
     }
 }
+
+void do_munmap(struct file_mem *file_mem){
+    // file_mem에 속하는 모든 vm_entry 탐색
+    for(struct list_elem *e = list_begin (&file_mem->vme_list); e != list_end (&file_mem->vme_list);){
+        // e를 통해 vm_entry 가져오기
+        struct vm_entry *vme = list_entry (e, struct vm_entry, mmap_elem);
+
+        // vme가 현재 load된 상태일 때
+        if(vme->is_loaded){
+            void * paddr = pagedir_get_page(thread_current()->pagedir, vme->vaddr);
+
+            // 만약 dirty_bit가 켜져있다면 디스크에 write
+            if(pagedir_is_dirty(thread_current()->pagedir, vme->vaddr)){
+                file_write_at (vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+            }
+            // 페이지 테이블 해제
+			pagedir_clear_page(thread_current()->pagedir, vme->vaddr);
+			// 물리 메모리 할당 해제
+			palloc_free_page(paddr);
+        }  
+        // 설정 해제
+        vme->is_loaded = false;
+        e = list_remove (e);
+        delete_vme (&thread_current()->vm, vme);
+    }
+}

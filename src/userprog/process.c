@@ -187,8 +187,12 @@ void process_exit(void)
 
 //    munnmap all file_memory mapping
     struct list * ml = &(thread_current()->file_mem_list);
-    for(struct list_elem *e = list_begin(ml); e != list_end(ml); e = list_next(e)) {
-      munmap(list_entry(e, struct file_mem, elem)->id);
+    for(struct list_elem *e = list_begin(ml); e != list_end(ml);) {
+        struct file_mem *fm = list_entry(e, struct file_mem, elem);
+        do_munmap(fm);
+        file_close(fm->file);
+        e = list_remove (e);
+        free(fm);
     }
 
     // VM을 제거한다.
