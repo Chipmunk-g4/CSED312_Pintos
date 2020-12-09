@@ -8,6 +8,7 @@
 #include "filesys/file.h"
 #include <string.h>
 #include "vm/swap.h"
+#include "userprog/syscall.h"
 
 struct list lru_list;
 struct lock lru_lock;
@@ -127,7 +128,9 @@ void do_munmap(struct file_mem *file_mem) {
 
       // 만약 dirty_bit가 켜져있다면 디스크에 write
       if (pagedir_is_dirty(thread_current()->pagedir, vme->vaddr)) {
+        lock_acquire(&filesys_lock);
         file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+        lock_release(&filesys_lock);
       }
       // 페이지 테이블 해제
       pagedir_clear_page(thread_current()->pagedir, vme->vaddr);
@@ -151,12 +154,10 @@ void insert_page(struct page *page) {
 
 void delete_page(struct page *page) {
   if (page != NULL) {
-    lock_acquire(&lru_lock);
     if (lru_clock == page)
       lru_clock = list_entry(list_next(&page->lru_elem), struct page, lru_elem);
 
     list_remove(&(page->lru_elem));
-    lock_release(&lru_lock);
   }
 }
 
@@ -235,8 +236,11 @@ void perform_swap_out(void) {
     // if dirty bit true or it's swap type
     if (pagedir_is_dirty(p->thread->pagedir, p->vme->vaddr) || p->vme->type == VM_ANON) {
       // if file type, write back
-      if (p->vme->type == VM_FILE)
+      if (p->vme->type == VM_FILE) {
+        lock_acquire(&filesys_lock);
         file_write_at(p->vme->file, p->addr, p->vme->read_bytes, p->vme->offset);
+        lock_release(&filesys_lock);
+      }
         // binary or swap type, then swap out
       else {
         p->vme->type = VM_ANON;
