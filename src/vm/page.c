@@ -135,6 +135,7 @@ void do_munmap(struct file_mem *file_mem){
 void insert_page(struct page * page) {
   if(page != NULL) {
     lock_acquire(&lru_lock);
+    list_push_back(&lru_list, &(page->lru_elem));
     lock_release(&lru_lock);
   }
 }
@@ -142,6 +143,10 @@ void insert_page(struct page * page) {
 void delete_page(struct page * page) {
   if(page != NULL) {
     lock_acquire(&lru_lock);
+    if(lru_clock == page)
+      lru_clock = list_entry(list_next(&page->lru_elem), struct page, lru_elem);
+
+    list_remove(&(page->lru_elem));
     lock_release(&lru_lock);
   }
 }
