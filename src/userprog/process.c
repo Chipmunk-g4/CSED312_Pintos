@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
@@ -183,6 +184,12 @@ void process_exit(void)
     lock_acquire(filesys_lock);
     file_close(thread_get_running_file());
     lock_release(filesys_lock);
+
+//    munnmap all file_memory mapping
+    struct list * ml = &(thread_current()->file_mem_list);
+    for(struct list_elem *e = list_begin(ml); e != list_end(ml); e = list_next(e)) {
+      munmap(list_entry(e, struct file_mem, elem)->id);
+    }
 
     // VM을 제거한다.
     vm_destroy (&cur->vm);
@@ -719,6 +726,7 @@ bool handle_mm_fault (struct vm_entry * vme){
             }
             break;
         case VM_ANON:
+            swap_in(vme->swap_slot, kaddr);
             break;
         default:
             return false;
