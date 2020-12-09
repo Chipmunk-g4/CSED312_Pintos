@@ -119,8 +119,7 @@ void do_munmap(struct file_mem *file_mem) {
   // file_mem에 속하는 모든 vm_entry 탐색
   for (struct list_elem *e = list_begin(&file_mem->vme_list); e != list_end(&file_mem->vme_list);) {
     // e를 통해 vm_entry 가져오기
-    struct vm_entry *vme = list_entry(e,
-    struct vm_entry, mmap_elem);
+    struct vm_entry *vme = list_entry(e, struct vm_entry, mmap_elem);
 
     // vme가 현재 load된 상태일 때
     if (vme->is_loaded) {
@@ -154,8 +153,7 @@ void delete_page(struct page *page) {
   if (page != NULL) {
     lock_acquire(&lru_lock);
     if (lru_clock == page)
-      lru_clock = list_entry(list_next(&page->lru_elem),
-    struct page, lru_elem);
+      lru_clock = list_entry(list_next(&page->lru_elem), struct page, lru_elem);
 
     list_remove(&(page->lru_elem));
     lock_release(&lru_lock);
@@ -186,8 +184,7 @@ struct page *alloc_page(enum palloc_flags flags) {
 void free_page(void *addr) {
   lock_acquire(&lru_lock);
   for (struct list_elem *e = list_begin(&lru_list); e != list_end(&lru_list); e = list_next(e)) {
-    struct page *p = list_entry(e,
-    struct page, lru_elem);
+    struct page *p = list_entry(e, struct page, lru_elem);
     if (p->addr == addr) {
       palloc_free_page(addr);
       delete_page(p);
@@ -205,8 +202,7 @@ struct page *get_next_clock(void) {
 //    if there's no element in list, return null
     if (list_size(&lru_list) == 0)
       return NULL;
-    lru_clock = list_entry(list_begin(&lru_list),
-    struct page, lru_elem);
+    lru_clock = list_entry(list_begin(&lru_list), struct page, lru_elem);
     return lru_clock;
   }
 
@@ -220,8 +216,7 @@ struct page *get_next_clock(void) {
   if (e == list_end(&lru_list)) {
     e = list_begin(&lru_list);
   }
-  lru_clock = list_entry(e,
-  struct page, lru_elem);
+  lru_clock = list_entry(e, struct page, lru_elem);
   return lru_clock;
 }
 
