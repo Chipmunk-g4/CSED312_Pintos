@@ -96,12 +96,12 @@ syscall_handler(struct intr_frame *f)
       break;
     case SYS_READ:
       get_argument(f->esp, arg, 3); // 인자: 3개
-      check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, true);
+      check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, true); // buffer is writeable
       f->eax = syscall_read(arg[0],arg[1],arg[2]);
       break;
     case SYS_WRITE:
       get_argument(f->esp, arg, 3); // 인자: 3개
-      check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, true);
+      check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, false); // buffer is not writeable
       f->eax = syscall_write(arg[0],arg[1],arg[2]);
       break;
     case SYS_SEEK:
@@ -121,11 +121,9 @@ syscall_handler(struct intr_frame *f)
       f->eax = mmap((int)arg[0], (void *)arg[1]);
       break;
     case SYS_MUNMAP:
-    {
       get_argument(f->esp, arg, 1); // 인자: 1개
       munmap((int)arg[0]);
       break;
-    }
     default:
       // 유효하지 않은 syscall
       syscall_exit(-1);
@@ -432,6 +430,9 @@ int mmap(int fd, void *addr) {
   while(length > 0){
     // 새로운 vme 할당 및 설정
     struct vm_entry *vme = (struct vm_entry *)malloc (sizeof (struct vm_entry));
+
+    // if there already exist => error
+    if (find_vme (addr)) return -1;
 
     vme->type = VM_FILE;
     vme->writable = true;
