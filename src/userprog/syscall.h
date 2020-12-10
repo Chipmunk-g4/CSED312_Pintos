@@ -1,8 +1,6 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
-extern struct lock filesys_lock;
-
 void syscall_init(void);
 
 struct lock *syscall_get_filesys_lock(void);

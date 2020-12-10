@@ -61,9 +61,6 @@ void lru_list_init(void);
 void insert_page(struct page * page);
 void delete_page(struct page * page);
 
-struct page * alloc_page(enum palloc_flags flags);
-void free_page(void * addr);
-
-void perform_swap_out(void);
+void free_page(void);
 
 #endif
