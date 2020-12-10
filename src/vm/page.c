@@ -185,7 +185,7 @@ void __free_page (struct page* page){
 } 
 
 // 물리 페이지가 부족할 때 clock알고리즘을 사용해서 여유메모리를 확보한다.
-void try_to_free_pages(enum palloc_flags flag){
+void try_to_free_pages(){
     lock_acquire(&lru_list_lock);
 
     while (true)

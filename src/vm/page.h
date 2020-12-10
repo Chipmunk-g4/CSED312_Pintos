@@ -59,6 +59,6 @@ void do_munmap(struct file_mem *file_mem); //file_mem에 연결된 모든 vm_ent
 struct page *alloc_page (enum palloc_flags flag); // page를 새롭게 할당해서 초기화 후 반환
 void free_page (void *addr);            // 입력된 addr의 page를 lru_list에서 검색 후 __free_page함수 호출
 void __free_page (struct page* page);   // lru_list에서 page 제거 후, page할당 해제
-void try_to_free_pages(enum palloc_flags flag);  // 물리 페이지가 부족할 때 clock알고리즘을 사용해서 여유메모리를 확보한다.
+void try_to_free_pages(void);  // 물리 페이지가 부족할 때 clock알고리즘을 사용해서 여유메모리를 확보한다.
 
 #endif
