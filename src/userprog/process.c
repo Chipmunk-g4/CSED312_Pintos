@@ -181,9 +181,7 @@ void process_exit(void)
         palloc_free_page(pcb);
 
     /* Close the running file. */
-    lock_acquire(filesys_lock);
     file_close(thread_get_running_file());
-    lock_release(filesys_lock);
 
 //    munnmap all file_memory mapping
     struct list * ml = &(thread_current()->file_mem_list);
@@ -551,6 +549,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
         vme->vaddr = upage;
         vme->writable = writable;
         vme->is_loaded  = false;
+        vme->pinned = false;
 
         vme->file = file;
 
@@ -575,29 +574,34 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack(void **esp)
 {
-    uint8_t *kpage;
+    struct page *kpage;
     bool success = false;
     void* v_addr = ((uint8_t *) PHYS_BASE) - PGSIZE; // 가상 주소를 만든다.
 
-    kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+    kpage = alloc_page(PAL_USER | PAL_ZERO);
     if (kpage != NULL)
     {
-        success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
+        success = install_page(pg_round_down(v_addr), kpage->addr, true);
         if (success)
             *esp = PHYS_BASE;
         else
-            palloc_free_page(kpage);
+            free_page(kpage->addr);
     }
 
     // vm_entry 생성
     struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
-    if (vme == NULL) return false; // 할당 실패
+    if (vme == NULL){
+         free_page(kpage->addr);
+         return false; // 할당 실패
+    }
 
     // vm_entry 필드 초기화
     vme->type = VM_ANON;
     vme->vaddr = pg_round_down(v_addr);
     vme->writable = true;
     vme->is_loaded = true;
+    vme->pinned = true;
+    kpage->vme = vme;
 
     // vm_entry를 해시에 추가
     success = insert_vme(&thread_current()->vm, vme);
@@ -675,7 +679,7 @@ static void push_arguments(int argc, char **argv, void **esp)
 //addr를 포함하도록 stack을 확장한다.
 //stack 확장에 성공하면 true를 return 한다.
  bool expand_stack(void* addr) {
-   uint8_t * pg = palloc_get_page(PAL_USER | PAL_ZERO); /* 메모리 page를 할당한다.*/
+   struct page * pg = alloc_page(PAL_USER); /* 메모리 page를 할당한다.*/
 
    // page 할당에 성공하였을 때
    if(pg != NULL) {
@@ -686,21 +690,23 @@ static void push_arguments(int argc, char **argv, void **esp)
      if(entry == NULL)
        return false;
 
+     if(!install_page(pg_round_down(addr), pg->addr, true)) {
+       free_page(pg->addr);
+       free(entry);
+       return false;
+     }
+
      // vm_entry 필드 초기화
      entry->type = VM_ANON;
      entry->vaddr = pg_round_down(addr);
      entry->writable = true;
      entry->is_loaded = true;
+     entry->pinned = true;
+     pg->vme = entry;
 
-//     pg->vme = entry;
+     insert_vme(&thread_current()->vm, pg->vme);
 
-     if(!install_page(entry->vaddr, pg, true)) {
-       palloc_free_page(pg);
-       free(entry);
-       return false;
-     }
-
-     insert_vme(&thread_current()->vm, entry);
+     if(intr_context()) pg->vme->pinned = false;
    }
 
    return true;
@@ -709,11 +715,19 @@ static void push_arguments(int argc, char **argv, void **esp)
 // 페이지 할당 -> 데이터 로드 -> 페이지 테이블 설정 역할을 하는 함수이다.
 bool handle_mm_fault (struct vm_entry * vme){
     // 1. 사용할 물리 메모리 할당하기
-    uint8_t *kaddr = palloc_get_page(PAL_USER);
-    // page가 없어 swap_out이 필요할 때,
+    struct page * kaddr = alloc_page(PAL_USER);
     if(kaddr == NULL) {
-      free_page();
-      void * page = palloc_get_page(PAL_USER);
+        //printf("false 1\n");
+        return false;
+    }
+
+    // vme 가져온 후, vme가 이미 메모리에 있다면 해제 후 종료
+    kaddr->vme = vme;
+    vme->pinned = true;
+    if(vme->is_loaded) {
+        //printf("false 2\n");
+        free_page(kaddr->addr);
+        return false;
     }
 
     // 2. load_file을 사용해서 데이터 로드하기
@@ -721,27 +735,34 @@ bool handle_mm_fault (struct vm_entry * vme){
     // VM_BIN, VM_FILE, VM_ANON에 따라 다르게 처리해야 하므로 switch case문 사용
     switch(vme->type){
         case VM_BIN:
-            if(!load_file(kaddr,vme) || !install_page(vme->vaddr, kaddr, vme->writable)){
+            if(!load_file(kaddr->addr,vme) || !install_page(vme->vaddr, kaddr->addr, vme->writable)){
                 // 만약 실패한 경우 kaddr할당을 해제하고 false반환
-                palloc_free_page(kaddr);
+                //printf("false 3\n");
+                free_page(kaddr->addr);
                 return false;
             }
             break;
         case VM_FILE:
-            if(!load_file(kaddr,vme) || !install_page(vme->vaddr, kaddr, vme->writable)){
+            if(!load_file(kaddr->addr,vme) || !install_page(vme->vaddr, kaddr->addr, vme->writable)){
                 // 만약 실패한 경우 kaddr할당을 해제하고 false반환
-                palloc_free_page(kaddr);
+                //printf("false 4\n");
+                free_page(kaddr->addr);
                 return false;
             }
             break;
         case VM_ANON:
-            swap_in(vme->swap_slot, kaddr);
+            swap_in(vme->swap_slot, kaddr->addr);
+            if (!install_page (vme->vaddr, kaddr->addr, vme->writable)){
+                free_page(kaddr->addr);
+                return false; 
+            }
             break;
         default:
+            //printf("false 5\n");
             return false;
     }
 
-    // 성공 반환
+    // 성공 반환, lru_list에 page 넣기
     vme->is_loaded = true;
 	return true;
 }

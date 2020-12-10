@@ -26,6 +26,8 @@ struct vm_entry{
     size_t swap_slot; // 스왑슬롯
 
     struct hash_elem elem; // 해시 테이블 요소
+
+    bool pinned; // true : victim으로 선정되지 않는다
 };
 
 struct file_mem {
@@ -56,11 +58,9 @@ bool load_file(void *kaddr, struct vm_entry *vme); // 디스크에 존재하는 
 
 void do_munmap(struct file_mem *file_mem); //file_mem에 연결된 모든 vm_entry제거 및 페이지 테이블 엔트리 제거.
 
-void lru_list_init(void);
-
-void insert_page(struct page * page);
-void delete_page(struct page * page);
-
-void free_page(void);
+struct page *alloc_page (enum palloc_flags flag); // page를 새롭게 할당해서 초기화 후 반환
+void free_page (void *addr);            // 입력된 addr의 page를 lru_list에서 검색 후 __free_page함수 호출
+void __free_page (struct page* page);   // lru_list에서 page 제거 후, page할당 해제
+void try_to_free_pages(void);  // 물리 페이지가 부족할 때 clock알고리즘을 사용해서 여유메모리를 확보한다.
 
 #endif

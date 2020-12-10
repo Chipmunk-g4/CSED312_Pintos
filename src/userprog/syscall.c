@@ -16,8 +16,6 @@
 #include "vm/page.h"
 #include "threads/malloc.h"
 
-struct lock filesys_lock;
-
 static void syscall_handler(struct intr_frame *);
 
 static struct vm_entry * check_vaddr(const void *vaddr, void* esp);
@@ -25,6 +23,9 @@ static void check_valid_buffer(const char *buffer, unsigned size, void *esp, boo
 static void check_valid_string(const char *str, void *esp);
 
 static void get_argument(int *esp, int *arg, int count);
+
+static void unpin_vaddr(void *vaddr);
+static void unpin_buffer(void *buff, unsigned size);
 
 static void syscall_halt(void);
 static pid_t syscall_exec(const char *);
@@ -98,11 +99,13 @@ syscall_handler(struct intr_frame *f)
       get_argument(f->esp, arg, 3); // 인자: 3개
       check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, true); // buffer is writeable
       f->eax = syscall_read(arg[0],arg[1],arg[2]);
+      unpin_buffer((void *)arg[1], (unsigned) arg[2]);
       break;
     case SYS_WRITE:
       get_argument(f->esp, arg, 3); // 인자: 3개
       check_valid_buffer((void *)arg[1], (unsigned)arg[2], f->esp, false); // buffer is not writeable
       f->eax = syscall_write(arg[0],arg[1],arg[2]);
+      unpin_buffer((void *)arg[1], (unsigned) arg[2]);
       break;
     case SYS_SEEK:
       get_argument(f->esp, arg, 2); // 인자: 2개
@@ -437,6 +440,7 @@ int mmap(int fd, void *addr) {
     vme->type = VM_FILE;
     vme->writable = true;
     vme->is_loaded = false;
+    vme->pinned = false;
     vme->vaddr = addr;
     vme->offset = offset;
     vme->read_bytes = length < PGSIZE ? length : PGSIZE;
@@ -479,4 +483,19 @@ void munmap(int map_id) {
   }
 
 //  cannot find mapping with map_id
+}
+
+// 입력된 vaddr의 vme을 unpin한다.
+static void unpin_vaddr(void *vaddr){
+  struct vm_entry *vme  = find_vme(vaddr);
+	if(vme != NULL) vme->pinned = false;
+}
+
+// 입력된 버퍼를 size만큼 unpin한다.
+static void unpin_buffer(void *buff, unsigned size){
+	char *buf = (char *)buff;
+	for(int i=0; i<size; i++){
+		unpin_vaddr(buf);
+		buf++;
+	}
 }
