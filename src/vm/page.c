@@ -8,6 +8,7 @@
 #include "userprog/pagedir.h"
 #include "userprog/syscall.h"
 #include "filesys/file.h"
+#include "vm/swap.h"
 #include <string.h>
 
 static unsigned vm_hash_func (const struct hash_elem *e, void *aux UNUSED); //해시 elem e의 vaddr에 대한 해시값 반환
