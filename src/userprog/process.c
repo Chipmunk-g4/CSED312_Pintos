@@ -181,9 +181,7 @@ void process_exit(void)
         palloc_free_page(pcb);
 
     /* Close the running file. */
-    lock_acquire(filesys_lock);
     file_close(thread_get_running_file());
-    lock_release(filesys_lock);
 
 //    munnmap all file_memory mapping
     struct list * ml = &(thread_current()->file_mem_list);

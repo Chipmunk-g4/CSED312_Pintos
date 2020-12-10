@@ -78,7 +78,7 @@ static void hash_destroy_sub (struct hash_elem *e, void *aux UNUSED){ // vm_dest
 
     // 만약 load되어있는 경우에는 물리메모리를 해제해준다.
     if(vme->is_loaded){
-		palloc_free_page(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
+		free_page(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
         pagedir_clear_page(thread_current()->pagedir, vme->vaddr);
     }
 
@@ -91,7 +91,6 @@ bool load_file(void *kaddr, struct vm_entry *vme){
     // file의 데이터를 offset부터 시작해서 read_bytes만큼 불러왔을 때 read_bytes만큼 제대로 불려와진 경우 => 성공
     if(file_read_at (vme->file, kaddr, vme->read_bytes, vme->offset) == (int) vme->read_bytes){
         // 물리메모리를 세팅하고, true를 반환한다.
-        printf("load file %x %x \n",kaddr, &kaddr);
         memset(kaddr + vme->read_bytes, 0, vme->zero_bytes);        
         return true;
     }
@@ -112,7 +111,9 @@ void do_munmap(struct file_mem *file_mem){
 
             // 만약 dirty_bit가 켜져있다면 디스크에 write
             if(pagedir_is_dirty(thread_current()->pagedir, vme->vaddr)){
+                lock_acquire(&filesys_lock);
                 file_write_at (vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+                lock_release(&filesys_lock);
             }
             // 페이지 테이블 해제
 			pagedir_clear_page(thread_current()->pagedir, vme->vaddr);
@@ -192,6 +193,10 @@ void __free_page (struct page* page){
 void try_to_free_pages(){
     lock_acquire(&lru_list_lock);
 
+    if(list_empty(&lru_list) == true){
+		lock_release(&lru_list_lock);
+		return;
+	}
     while (true)
     {
         struct list_elem *e = get_next_lru_clock();
