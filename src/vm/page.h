@@ -26,6 +26,8 @@ struct vm_entry{
     size_t swap_slot; // 스왑슬롯
 
     struct hash_elem elem; // 해시 테이블 요소
+
+    bool pinned; // true : victim으로 선정되지 않는다
 };
 
 struct file_mem {

@@ -187,6 +187,10 @@ page_fault(struct intr_frame *f)
     // printf("Page Fault 1 %d ###\n",count_fault);
     // vme에 해당하는 데이터가 물리 메모리에 올라오지 못한 경우 에러 출력
     load = handle_mm_fault(vme);
+    if(vme->is_loaded == true){
+			vme->pinned = false;
+			load = true;
+		}
   }
 
   if(load == false){

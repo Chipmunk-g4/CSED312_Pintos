@@ -551,6 +551,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
         vme->vaddr = upage;
         vme->writable = writable;
         vme->is_loaded  = false;
+        vme->pinned = false;
 
         vme->file = file;
 
@@ -601,6 +602,7 @@ setup_stack(void **esp)
     vme->vaddr = pg_round_down(v_addr);
     vme->writable = true;
     vme->is_loaded = true;
+    vme->pinned = true;
     kpage->vme = vme;
 
     // vm_entry를 해시에 추가
@@ -701,9 +703,12 @@ static void push_arguments(int argc, char **argv, void **esp)
      entry->vaddr = pg_round_down(addr);
      entry->writable = true;
      entry->is_loaded = true;
+     entry->pinned = true;
      pg->vme = entry;
 
      insert_vme(&thread_current()->vm, pg->vme);
+
+     if(intr_context()) pg->vme->pinned = false;
    }
 
    return true;
@@ -720,6 +725,7 @@ bool handle_mm_fault (struct vm_entry * vme){
 
     // vme 가져온 후, vme가 이미 메모리에 있다면 해제 후 종료
     kaddr->vme = vme;
+    vme->pinned = true;
     if(vme->is_loaded) {
         //printf("false 2\n");
         free_page(kaddr->addr);

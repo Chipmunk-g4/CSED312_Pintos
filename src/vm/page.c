@@ -199,6 +199,9 @@ void try_to_free_pages(){
             break;
         struct page* p = list_entry(e, struct page, lru_elem);
 
+        // pinned가 켜져있으면 넘어간다. (victim의 후보가 아님)
+        if(p->vme->pinned == true) continue;
+
         if (pagedir_is_accessed(p->thread->pagedir, p->vme->vaddr))
         {
             pagedir_set_accessed(p->thread->pagedir, p->vme->vaddr, false);
