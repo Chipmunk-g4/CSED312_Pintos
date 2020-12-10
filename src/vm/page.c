@@ -6,6 +6,7 @@
 #include "lib/kernel/list.h"
 #include "threads/synch.h"
 #include "userprog/pagedir.h"
+#include "userprog/syscall.h"
 #include "filesys/file.h"
 #include <string.h>
 
@@ -177,7 +178,54 @@ void __free_page (struct page* page){
     // page의 물리메모리 할당 해제
 	palloc_free_page(page->addr);
 	// lru_list에서 page 삭제
-	del_page_from_lru_list(page);
+	delete_page_lru(page);
     // page 할당 해제
 	free(page);
 } 
+
+// 물리 페이지가 부족할 때 clock알고리즘을 사용해서 여유메모리를 확보한다.
+void try_to_free_pages(enum palloc_flags flag){
+    lock_acquire(&lru_list_lock);
+
+    while (true)
+    {
+        struct list_elem *e = get_next_lru_clock();
+        if (e == NULL)
+            break;
+        struct page* p = list_entry(e, struct page, lru_elem);
+
+        if (pagedir_is_accessed(p->thread->pagedir, p->vme->vaddr))
+        {
+            pagedir_set_accessed(p->thread->pagedir, p->vme->vaddr, false);
+            continue;
+        }
+
+        // if reaches here, victim is selected
+        // if dirty bit true or it's swap type
+
+        if (pagedir_is_dirty(p->thread->pagedir, p->vme->vaddr) || p->vme->type == VM_ANON)
+        {
+            // if file type, write back
+            if (p->vme->type == VM_FILE)
+            {
+                lock_acquire(&filesys_lock);
+                file_write_at(p->vme->file, p->addr, p->vme->read_bytes, p->vme->offset);
+                lock_release(&filesys_lock);
+            }
+            // binary or swap type, then swap out
+            else
+            {
+                p->vme->type = VM_ANON;
+                p->vme->swap_slot = swap_out(p->addr);
+            }
+        }
+
+        p->vme->is_loaded = false;
+
+        //clear physical page
+        pagedir_clear_page(p->thread->pagedir, p->vme->vaddr);
+        __free_page(p);
+        break;
+    }
+    lock_release(&lru_list_lock);
+}

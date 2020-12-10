@@ -5,8 +5,6 @@
 #include "threads/interrupt.h"
 #include "threads/vaddr.h"
 
-// Clock 알고리즘을 수행할 때 lru_list의 다음 원소로 이동하는 역할을 하는 함수이다.
-static struct list_elem *get_next_lru_clock ();
 
 // lru_list를 초기화하는 함수
 void lru_list_init (void){
@@ -31,7 +29,7 @@ void delete_page_lru (struct page* page){
 
 // Clock 알고리즘을 수행할 때 lru_list의 다음 원소로 이동하는 역할을 하는 함수이다.
 // 호출시 lru_list에서 다음 위치를 반환한다.
-static struct list_elem *get_next_lru_clock (){
+struct list_elem *get_next_lru_clock (){
 
     // 만약 현재 lru_clock이 비어있는 경우
     if(lru_clock == NULL){

@@ -16,8 +16,6 @@
 #include "vm/page.h"
 #include "threads/malloc.h"
 
-struct lock filesys_lock;
-
 static void syscall_handler(struct intr_frame *);
 
 static struct vm_entry * check_vaddr(const void *vaddr, void* esp);
