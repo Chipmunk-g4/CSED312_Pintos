@@ -1,5 +1,5 @@
-#include "vm/page.h"
 #include "vm/swap.h"
+#include "vm/page.h"
 #include "threads/synch.h"
 #include "devices/block.h"
 #include "lib/kernel/bitmap.h"

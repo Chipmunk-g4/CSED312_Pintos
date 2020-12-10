@@ -115,7 +115,7 @@ void do_munmap(struct file_mem *file_mem){
             // 페이지 테이블 해제
 			pagedir_clear_page(thread_current()->pagedir, vme->vaddr);
 			// 물리 메모리 할당 해제
-			palloc_free_page(paddr);
+			free_page(paddr);
         }  
         // 설정 해제
         vme->is_loaded = false;
