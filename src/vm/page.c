@@ -1,4 +1,5 @@
 #include "page.h"
+#include "vm/frame.h"
 #include "threads/vaddr.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
@@ -121,3 +122,62 @@ void do_munmap(struct file_mem *file_mem){
         delete_vme (&thread_current()->vm, vme);
     }
 }
+
+// page를 새롭게 할당해서 초기화 후 반환
+/**
+ * 다음의 순서로 작동한다
+ * 1. palloc_get_page()함수를 통해 물리 메모리를 할당받는다.
+ * 1-ex. 만약 1에서 할당받을 수 없는경우 try_to_free_pages()함수를 통해 여유공간을 확보하며, 성공할 때 까지 반복
+ * 2. 페이지 할당이 성공한 경우, struct page를 할당하여 초기화해준다.
+ * 3. 만들어진 page를 lru_list에 추가한 후 반환한다. 
+ */
+struct page *alloc_page (enum palloc_flags flag){\
+    // 1.
+    void* kaddr = palloc_get_page(flag);
+    // 1-ex.
+	while(kaddr == NULL){
+		try_to_free_pages();
+		kaddr = palloc_get_page(flag);
+	}
+
+    // 2.
+    struct page* page = (struct page *)malloc (sizeof (struct page));
+    if(page == NULL){
+        palloc_free_page(kaddr);
+		return NULL;
+    }
+    page->addr = kaddr;
+    page->thread = thread_current();
+
+    // 3.
+    insert_page_lru(page);
+    return page;
+}
+
+// 입력된 addr의 page를 lru_list에서 검색 후 __free_page함수 호출
+void free_page (void *addr){
+    lock_acquire(&lru_list_lock);
+
+    // 입력된 addr의 page를 lru_list에서 검색하기
+    for(struct list_elem *e = list_begin(&lru_list); e != list_end (&lru_list); e = list_next (e)){
+        struct page *page = list_entry (e, struct page, lru_elem);
+
+        // 찾았다면 __free_page함수를 통해 page삭제
+        if(page->addr == addr){
+            __free_page(page);
+            break;
+        }
+    }
+
+    lock_release(&lru_list_lock);
+}
+
+// lru_list에서 page 제거 후, page할당 해제
+void __free_page (struct page* page){
+    // page의 물리메모리 할당 해제
+	palloc_free_page(page->addr);
+	// lru_list에서 page 삭제
+	del_page_from_lru_list(page);
+    // page 할당 해제
+	free(page);
+} 

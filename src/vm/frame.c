@@ -5,10 +5,6 @@
 #include "threads/interrupt.h"
 #include "threads/vaddr.h"
 
-struct list lru_list;
-struct lock lru_list_lock;
-struct list_elem * lru_clock;
-
 // lru_list를 초기화하는 함수
 void lru_list_init (void){
     list_init (&lru_list);
