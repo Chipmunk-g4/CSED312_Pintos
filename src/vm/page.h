@@ -56,11 +56,4 @@ bool load_file(void *kaddr, struct vm_entry *vme); // 디스크에 존재하는 
 
 void do_munmap(struct file_mem *file_mem); //file_mem에 연결된 모든 vm_entry제거 및 페이지 테이블 엔트리 제거.
 
-void lru_list_init(void);
-
-void insert_page(struct page * page);
-void delete_page(struct page * page);
-
-void free_page(void);
-
 #endif
