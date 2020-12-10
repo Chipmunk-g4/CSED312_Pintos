@@ -109,6 +109,8 @@ kill(struct intr_frame *f)
   }
 }
 
+// int count_fault = 0;
+
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -174,16 +176,21 @@ page_fault(struct intr_frame *f)
       return;
   }
 
+  // printf("fault_addr %x\n", fault_addr);
+
   // fault_addr에 해당하는 vm_entry 가져오기
   struct vm_entry * vme = find_vme(fault_addr);
 
   // vme가 존재하는 경우
   if(vme != NULL){
+    // count_fault++;
+    // printf("Page Fault 1 %d ###\n",count_fault);
     // vme에 해당하는 데이터가 물리 메모리에 올라오지 못한 경우 에러 출력
     load = handle_mm_fault(vme);
   }
 
   if(load == false){
+    // printf("Page Fault exit ###\n");
 	  syscall_exit(-1);
   }
 }

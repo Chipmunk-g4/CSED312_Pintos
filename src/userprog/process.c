@@ -582,7 +582,7 @@ setup_stack(void **esp)
     kpage = alloc_page(PAL_USER | PAL_ZERO);
     if (kpage != NULL)
     {
-        success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage->addr, true);
+        success = install_page(pg_round_down(v_addr), kpage->addr, true);
         if (success)
             *esp = PHYS_BASE;
         else
@@ -591,7 +591,10 @@ setup_stack(void **esp)
 
     // vm_entry 생성
     struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
-    if (vme == NULL) return false; // 할당 실패
+    if (vme == NULL){
+         free_page(kpage->addr);
+         return false; // 할당 실패
+    }
 
     // vm_entry 필드 초기화
     vme->type = VM_ANON;
@@ -711,12 +714,14 @@ bool handle_mm_fault (struct vm_entry * vme){
     // 1. 사용할 물리 메모리 할당하기
     struct page * kaddr = alloc_page(PAL_USER);
     if(kaddr == NULL) {
-      return false;
+        //printf("false 1\n");
+        return false;
     }
 
     // vme 가져온 후, vme가 이미 메모리에 있다면 해제 후 종료
     kaddr->vme = vme;
     if(vme->is_loaded) {
+        //printf("false 2\n");
         free_page(kaddr->addr);
         return false;
     }
@@ -728,6 +733,7 @@ bool handle_mm_fault (struct vm_entry * vme){
         case VM_BIN:
             if(!load_file(kaddr->addr,vme) || !install_page(vme->vaddr, kaddr->addr, vme->writable)){
                 // 만약 실패한 경우 kaddr할당을 해제하고 false반환
+                //printf("false 3\n");
                 free_page(kaddr->addr);
                 return false;
             }
@@ -735,14 +741,20 @@ bool handle_mm_fault (struct vm_entry * vme){
         case VM_FILE:
             if(!load_file(kaddr->addr,vme) || !install_page(vme->vaddr, kaddr->addr, vme->writable)){
                 // 만약 실패한 경우 kaddr할당을 해제하고 false반환
+                //printf("false 4\n");
                 free_page(kaddr->addr);
                 return false;
             }
             break;
         case VM_ANON:
             swap_in(vme->swap_slot, kaddr->addr);
+            if (!install_page (vme->vaddr, kaddr->addr, vme->writable)){
+                free_page(kaddr->addr);
+                return false; 
+            }
             break;
         default:
+            //printf("false 5\n");
             return false;
     }
 

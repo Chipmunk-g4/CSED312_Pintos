@@ -12,6 +12,7 @@ struct bitmap * swap_map;
 #define BLOCK_SECTOR (PGSIZE/BLOCK_SECTOR_SIZE)
 
 void swap_init(void) {
+  // printf("swap init\n");
   // initialize lock
   lock_init(&swap_lock);
 
@@ -25,6 +26,7 @@ void swap_init(void) {
 }
 
 void swap_in(size_t index, void *frame) {
+  // printf("swap in\n");
   lock_acquire(&swap_lock);
 
 //  before read data from block, check index is valid. (== is occupied)
@@ -40,6 +42,7 @@ void swap_in(size_t index, void *frame) {
 }
 
 size_t swap_out(void *frame) {
+  // printf("swap out\n");
   lock_acquire(&swap_lock);
 
   int index = bitmap_scan_and_flip(swap_map, 0, 1, 0);

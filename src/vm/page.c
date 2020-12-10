@@ -91,6 +91,7 @@ bool load_file(void *kaddr, struct vm_entry *vme){
     // file의 데이터를 offset부터 시작해서 read_bytes만큼 불러왔을 때 read_bytes만큼 제대로 불려와진 경우 => 성공
     if(file_read_at (vme->file, kaddr, vme->read_bytes, vme->offset) == (int) vme->read_bytes){
         // 물리메모리를 세팅하고, true를 반환한다.
+        printf("load file %x %x \n",kaddr, &kaddr);
         memset(kaddr + vme->read_bytes, 0, vme->zero_bytes);        
         return true;
     }
@@ -133,7 +134,10 @@ void do_munmap(struct file_mem *file_mem){
  * 2. 페이지 할당이 성공한 경우, struct page를 할당하여 초기화해준다.
  * 3. 만들어진 page를 lru_list에 추가한 후 반환한다. 
  */
-struct page *alloc_page (enum palloc_flags flag){\
+struct page *alloc_page (enum palloc_flags flag){
+
+    if((flag & PAL_USER) == 0)	return NULL;
+
     // 1.
     void* kaddr = palloc_get_page(flag);
     // 1-ex.
